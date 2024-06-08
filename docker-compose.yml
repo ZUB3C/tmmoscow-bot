@@ -1,0 +1,8 @@
+services:
+   bot:
+      build: .
+      restart: always
+      env_file: .env
+      volumes:
+         - ./${SQLITE_DB_FILE}:/app/${SQLITE_DB_FILE}
+         - ./data:/app/data
