@@ -20,6 +20,7 @@ alembic = "^1.13.1"
 aiosqlite = "^0.20.0"
 pydantic-settings = "^2.1.0"
 loguru = "^0.7.2"
+selectolax = "^0.3.21"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.4.3"
@@ -66,6 +67,8 @@ select = [
 ignore = [
     "PTH123", # `open()` should be replaced by `Path.open()`
     "PD901", # Avoid using the generic variable name df for DataFrames
+    "RUF003", # Ambiguous unicode character comment
+    "RUF001", # String contains ambiguous `В` (CYRILLIC CAPITAL LETTER VE)
 ]
 
 [tool.ruff.lint.isort]
