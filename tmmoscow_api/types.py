@@ -37,12 +37,30 @@ class Competition:
     date: str
     location: str
     views: int | None
-    updated_at: datetime
+    updated_at: datetime | str | None
     logo_url: str | None
 
     @property
     def url(self) -> str:
         return f"{INDEX_URL}?go=News&in=view&id={self.id}"
+
+
+@dataclass(frozen=True)
+class ContentLine:
+    html: str
+
+
+@dataclass(frozen=True)
+@dataclass
+class ContentBlock:
+    title: str
+    lines: list[ContentLine]
+
+
+@dataclass(frozen=True)
+class CompetitionInfo(Competition):
+    author: str | None
+    content_blocks: list[ContentBlock]
 
 
 BASE_URL = "http://www.tmmoscow.ru"
