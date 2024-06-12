@@ -33,12 +33,8 @@ class TmMoscowAPI:
             connector=aiohttp.TCPConnector(limit=max_requests_per_second),
         )
 
-    async def close(self) -> None:
-        if not self._session.closed:
-            await self._session.close()
-
     async def get_recent_competitions(self, category: NewsCategory) -> list[Competition]:
-        """Get 30 recent competitions"""
+        """Get information about 30 latest competitions"""
         if category in (NewsCategory.IN_MOSCOW, NewsCategory.IN_RUSSIA):
             raise ValueError("NewsCategory.IN_MOSCOW, NewsCategory.IN_RUSSIA aren't supported yet")
 
@@ -58,6 +54,7 @@ class TmMoscowAPI:
         return competitions
 
     async def get_competition_data(self, id: int) -> CompetitionInfo:
+        """Get detailed information about competition"""
         params = {"go": "News", "in": "view", "id": id}
         html = await self._get(INDEX_PATH, params=params)
         parser = HTMLParser(html)
@@ -80,7 +77,6 @@ class TmMoscowAPI:
             )
         )
 
-        # current_content_block: ContentBlock | None = None
         current_title = ""
         current_content_lines: list[ContentLine] = []
         for line_html in content_lines:
@@ -199,6 +195,10 @@ class TmMoscowAPI:
             logging.debug("Sent GET request: %d: %s", response.status, str(response.url))
             response.raise_for_status()
             return await response.text()
+
+    async def close(self) -> None:
+        if not self._session.closed:
+            await self._session.close()
 
     async def __aenter__(self) -> "TmMoscowAPI":
         return self
