@@ -2,7 +2,7 @@ import asyncio
 
 from alembic import context
 from alembic.config import Config
-from sqlalchemy import MetaData
+from sqlalchemy import URL, MetaData
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -31,9 +31,9 @@ target_metadata: MetaData = Base.metadata
 # ... etc.
 
 
-def _get_sqlite_url() -> str:
+def _get_postgres_dsn() -> URL:
     settings: Settings = Settings()
-    return settings.build_sqlite_url()
+    return settings.build_dsn()
 
 
 def run_migrations_offline() -> None:
@@ -49,7 +49,7 @@ def run_migrations_offline() -> None:
 
     """
     context.configure(
-        url=_get_sqlite_url(),
+        url=_get_postgres_dsn(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -71,7 +71,7 @@ async def run_async_migrations() -> None:
     In this scenario we need to create an Engine
     and associate a connection with the context.
     """
-    connectable: AsyncEngine = create_async_engine(url=_get_sqlite_url())
+    connectable: AsyncEngine = create_async_engine(url=_get_postgres_dsn())
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

@@ -21,6 +21,7 @@ aiosqlite = "^0.20.0"
 pydantic-settings = "^2.1.0"
 loguru = "^0.7.2"
 selectolax = "^0.3.21"
+asyncpg = "^0.29.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.4.3"

@@ -48,7 +48,7 @@ class TmMoscowAPI:
         competitions: list[Competition] = []
         tr_tags = news_tag.css("tr")
         for i in range(0, len(tr_tags), 5):
-            tags_chunk = tr_tags[i: i + 5]
+            tags_chunk = tr_tags[i : i + 5]
             competition = self._parse_competition(tags_chunk, _CompetitionParseType.FROM_NEWS)
             competitions.append(competition)
         return competitions
