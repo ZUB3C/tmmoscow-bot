@@ -51,7 +51,6 @@ class ContentLine:
 
 
 @dataclass(frozen=True)
-@dataclass
 class ContentBlock:
     title: str
     lines: list[ContentLine]
