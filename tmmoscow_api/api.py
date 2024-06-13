@@ -192,7 +192,7 @@ class TmMoscowAPI:
         """Get html from full `url` or `path` relative to base url."""
         url = url or urljoin(BASE_URL, path)
         async with self._session.request(method="GET", url=url, **kwargs) as response:
-            logging.debug("Sent GET request: %d: %s", response.status, str(response.url))
+            logger.debug("Sent GET request: %d: %s", response.status, str(response.url))
             response.raise_for_status()
             return await response.text()
 
