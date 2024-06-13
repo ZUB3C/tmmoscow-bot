@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 from enum import Enum
 from types import TracebackType
-from typing import Any, Final
+from typing import Any, Final, cast
 from urllib.parse import parse_qs, urljoin, urlparse
 
 import aiohttp
@@ -75,7 +75,7 @@ class TmMoscowAPI:
                 str.strip,
                 filter(
                     lambda html: HTMLParser(html).text(strip=True) != "",
-                    content_tag.html.split("<br>"),
+                    cast(str, content_tag.html).split("<br>"),
                 ),
             )
         )
@@ -115,7 +115,7 @@ class TmMoscowAPI:
                 for node in line_parser.tags("a"):
                     for attr in node.attributes:
                         if attr != "href":
-                            del node.attrs[attr]
+                            del node.attrs[attr]  # type: ignore[attr-defined]
                 current_content_lines.append(
                     ContentLine(html=self.get_body_html(line_parser), comment=comment)
                 )
@@ -160,7 +160,8 @@ class TmMoscowAPI:
                     updated_at_tag = tag
                     break
             date_str = (
-                updated_at_tag.text(strip=True, separator=" ")
+                cast(Node, updated_at_tag)
+                .text(strip=True, separator=" ")
                 .lower()
                 .removeprefix("обновлено ")
                 .split(" ")[0]
@@ -171,7 +172,7 @@ class TmMoscowAPI:
                     date_str, "%d.%m.%Y"
                 )
             except ValueError:
-                updated_at = date_str
+                updated_at = date_str  # type: ignore[assignment]
             updated_at_tags[1 if len(updated_at_tags) >= 2 else 0].decompose()
         else:
             updated_at = None
@@ -185,8 +186,8 @@ class TmMoscowAPI:
 
         competition_url = competition_url_tag.css_first("td > a").attributes.get("href")
         parsed_url = urlparse(competition_url)
-        query_params = parse_qs(parsed_url.query)
-        id_value = int(query_params.get("id", [None])[0])
+        query_params: dict[str, list[str]] = parse_qs(str(parsed_url.query))
+        id_value = int(query_params.get("id", (-1,))[0])
 
         logo_url_tag = metadata_tag.css_first("a > img")
         logo_url = logo_url_tag.attributes.get("src") if logo_url_tag else None
@@ -208,7 +209,8 @@ class TmMoscowAPI:
 
     @staticmethod
     def get_body_html(parser: HTMLParser) -> str:
-        return parser.body.html[6:-7]  # remove "<body>" and "</body>"
+        # Remove "<body>" and "</body>"
+        return cast(str, parser.body.html)[6:-7]  # type: ignore[union-attr]
 
     async def _get(self, path: str = "", url: str = "", **kwargs: Any) -> str:
         """Get html from full `url` or `path` relative to base url."""
