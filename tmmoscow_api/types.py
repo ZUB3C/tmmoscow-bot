@@ -48,6 +48,7 @@ class Competition:
 @dataclass(frozen=True)
 class ContentLine:
     html: str
+    comment: str | None
 
 
 @dataclass(frozen=True)
