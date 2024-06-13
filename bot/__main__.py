@@ -31,7 +31,7 @@ async def main() -> None:
 
     dp.include_routers(user.router, admin.router)
 
-    pool = dp["session_pool"] = create_pool(dsn=settings.build_sqlite_url(), enable_logging=False)
+    pool = dp["session_pool"] = create_pool(dsn=settings.build_dsn(), enable_logging=False)
     i18n_middleware = dp["i18n_middleware"] = I18nMiddleware(
         core=FluentRuntimeCore(
             path="translations/{locale}",
