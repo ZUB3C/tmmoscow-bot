@@ -48,7 +48,7 @@ class TmMoscowAPI:
         competitions: list[Competition] = []
         tr_tags = news_tag.css("tr")
         for i in range(0, len(tr_tags), 5):
-            tags_chunk = tr_tags[i : i + 5]
+            tags_chunk = tr_tags[i: i + 5]
             competition = self._parse_competition(tags_chunk, _CompetitionParseType.FROM_NEWS)
             competitions.append(competition)
         return competitions
@@ -71,9 +71,12 @@ class TmMoscowAPI:
         content_blocks: list[ContentBlock] = []
 
         content_lines = list(
-            filter(
-                lambda html: HTMLParser(html).text(strip=True) != "",
-                content_tag.html.split("<br>"),
+            map(
+                str.strip,
+                filter(
+                    lambda html: HTMLParser(html).text(strip=True) != "",
+                    content_tag.html.split("<br>"),
+                ),
             )
         )
 
@@ -99,8 +102,23 @@ class TmMoscowAPI:
                         current_content_lines = []
                     current_title = text
             else:
-                if current_title:
-                    current_content_lines.append(ContentLine(html=line_html))
+                comment_tag = line_parser.css_first("font")
+                if comment_tag:
+                    if comment_tag.text(strip=True) != "":
+                        comment = comment_tag.text(strip=True)
+                    else:
+                        comment = None
+                    comment_tag.decompose()
+                else:
+                    comment = None
+                # Remove all attributes except href
+                for node in line_parser.tags("a"):
+                    for attr in node.attributes:
+                        if attr != "href":
+                            del node.attrs[attr]
+                current_content_lines.append(
+                    ContentLine(html=self.get_body_html(line_parser), comment=comment)
+                )
         content_blocks.append(ContentBlock(title=current_title, lines=current_content_lines))
 
         author = tr_tags[7].css_first("td").text(strip=True, deep=False)
@@ -187,6 +205,10 @@ class TmMoscowAPI:
             updated_at=updated_at,
             logo_url=logo_url,
         )
+
+    @staticmethod
+    def get_body_html(parser: HTMLParser) -> str:
+        return parser.body.html[6:-7]  # remove "<body>" and "</body>"
 
     async def _get(self, path: str = "", url: str = "", **kwargs: Any) -> str:
         """Get html from full `url` or `path` relative to base url."""
