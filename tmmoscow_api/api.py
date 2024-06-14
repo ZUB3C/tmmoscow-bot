@@ -1,7 +1,6 @@
 import logging
 import re
 from datetime import datetime
-from enum import Enum, auto
 from types import TracebackType
 from typing import Any, Final, cast
 from urllib.parse import urljoin
@@ -9,6 +8,7 @@ from urllib.parse import urljoin
 import aiohttp
 from selectolax.parser import HTMLParser, Node
 
+from .enums import NewsCategory, _CompetitionParseType
 from .types import (
     BASE_URL,
     INDEX_PATH,
@@ -16,16 +16,10 @@ from .types import (
     CompetitionInfo,
     ContentBlock,
     ContentLine,
-    NewsCategory,
 )
 from .utils import get_body_html, get_url_parameter_value
 
 logger: Final[logging.Logger] = logging.getLogger(name=__name__)
-
-
-class _CompetitionParseType(Enum):
-    FROM_NEWS = auto()
-    FROM_COMPETITION = auto()
 
 
 class TmMoscowAPI:
