@@ -1,10 +1,10 @@
 import logging
 import re
 from datetime import datetime
-from enum import Enum
+from enum import Enum, auto
 from types import TracebackType
 from typing import Any, Final, cast
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import urljoin
 
 import aiohttp
 from selectolax.parser import HTMLParser, Node
@@ -18,13 +18,14 @@ from .types import (
     ContentLine,
     NewsCategory,
 )
+from .utils import get_body_html, get_url_parameter_value
 
 logger: Final[logging.Logger] = logging.getLogger(name=__name__)
 
 
 class _CompetitionParseType(Enum):
-    FROM_NEWS = 0
-    FROM_COMPETITION = 1
+    FROM_NEWS = auto()
+    FROM_COMPETITION = auto()
 
 
 class TmMoscowAPI:
@@ -50,7 +51,11 @@ class TmMoscowAPI:
         tr_tags = news_tag.css("tr")
         for i in range(0, len(tr_tags), 5):
             tags_chunk = tr_tags[i : i + 5]
-            competition = self._parse_competition(tags_chunk, _CompetitionParseType.FROM_NEWS)
+            competition = self._parse_competition(
+                tr_tags=tags_chunk,
+                category=category,
+                competition_parse_type=_CompetitionParseType.FROM_NEWS,
+            )
             competitions.append(competition)
         return competitions
 
@@ -65,7 +70,7 @@ class TmMoscowAPI:
         )
         tr_tags = data_tag.css("tr")
         competition = self._parse_competition(
-            tr_tags[:9],
+            tr_tags=tr_tags[:9],
             competition_parse_type=_CompetitionParseType.FROM_COMPETITION,
             competition_id=id,
         )
@@ -120,7 +125,7 @@ class TmMoscowAPI:
                         if attr != "href":
                             del node.attrs[attr]  # type: ignore[attr-defined]
                 current_content_lines.append(
-                    ContentLine(html=self.get_body_html(line_parser), comment=comment)
+                    ContentLine(html=get_body_html(line_parser), comment=comment)
                 )
         content_blocks.append(ContentBlock(title=current_title, lines=current_content_lines))
 
@@ -142,12 +147,15 @@ class TmMoscowAPI:
     def _parse_competition(
         tr_tags: list[Node],
         competition_parse_type: _CompetitionParseType,
+        category: NewsCategory | None = None,
         *,
         competition_id: int | None = None,
     ) -> Competition:
         if not (len(tr_tags) >= 3 and all(len(tag.css("tr")) == 1 for tag in tr_tags)):
             raise ValueError("All tags should be <tr>")
         if competition_parse_type is _CompetitionParseType.FROM_NEWS:
+            if category is None:
+                raise ValueError("Give category argument of type NewsCategory")
             title_tag, metadata_tag, views_tag = tr_tags[:3]
             title = title_tag.text(strip=True)
         elif competition_parse_type is _CompetitionParseType.FROM_COMPETITION:
@@ -155,8 +163,29 @@ class TmMoscowAPI:
             metadata_tag = tr_tags[3]
             views_tag = tr_tags[8]
             title = title_tag.css_first("td > font").text(strip=True)
+
+            category_url = title_tag.css_first("td > a").attributes.get("href")
+            category_id = int(get_url_parameter_value(url=category_url, parameter="id"))
+            for news_category in NewsCategory:
+                if category_id == news_category.value.id:
+                    category = news_category
+                    break
+            if category is None:
+                raise RuntimeError(f"Couldn't convert {category_id=} to NewsCategory")
         else:
             raise ValueError("competition_parse_type should be _CompetitionParseType type")
+        title_suffix_templates = [
+            "Дистанции - %s.",
+            "Дистанции - %s",
+            "Дистанции %s.",
+            "Дистанции %s",
+            "%s.",
+            "%s",
+        ]
+        category_title = category.value.title.lower()
+        for title_suffix in title_suffix_templates:
+            title = title.removesuffix(title_suffix % category_title)
+        title.removesuffix(".")
 
         updated_at_tags = metadata_tag.css("b")
         if len(updated_at_tags) >= 1:
@@ -187,11 +216,8 @@ class TmMoscowAPI:
             updated_at = None
 
         if competition_parse_type is _CompetitionParseType.FROM_NEWS:
-            competition_url_tag = title_tag
-            competition_url = competition_url_tag.css_first("td > a").attributes.get("href")
-            parsed_url = urlparse(competition_url)
-            query_params: dict[str, list[str]] = parse_qs(str(parsed_url.query))
-            id_value = int(query_params.get("id", (-1,))[0])
+            competition_url = title_tag.css_first("td > a").attributes.get("href")
+            id_value = int(get_url_parameter_value(url=competition_url, parameter="id"))
         elif competition_parse_type is _CompetitionParseType.FROM_COMPETITION:
             if not isinstance(competition_id, int):
                 raise ValueError(f"competition_id should be int, not {competition_id}")
@@ -216,11 +242,6 @@ class TmMoscowAPI:
             updated_at=updated_at,
             logo_url=logo_url,
         )
-
-    @staticmethod
-    def get_body_html(parser: HTMLParser) -> str:
-        # Remove "<body>" and "</body>"
-        return cast(str, parser.body.html)[6:-7]  # type: ignore[union-attr]
 
     async def _get(self, path: str = "", url: str = "", **kwargs: Any) -> str:
         """Get html from full `url` or `path` relative to base url."""
