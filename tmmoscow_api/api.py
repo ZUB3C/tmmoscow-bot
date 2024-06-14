@@ -35,18 +35,22 @@ class TmMoscowAPI:
             connector=aiohttp.TCPConnector(limit=max_requests_per_second),
         )
 
-    async def get_recent_competitions(self, category: NewsCategory) -> list[Competition]:
-        """Get information about 30 latest competitions"""
+    async def get_recent_competitions(
+        self, category: NewsCategory, *, offset: int = 0
+    ) -> list[Competition]:
+        """Get data on 30 latest competitions with offset"""
         if category in (NewsCategory.IN_MOSCOW, NewsCategory.IN_RUSSIA):
             raise ValueError("NewsCategory.IN_MOSCOW, NewsCategory.IN_RUSSIA aren't supported yet")
 
-        params = {"go": "News", "in": "cat", "id": category.value.id}
+        params = {"go": "News", "in": "cat", "id": category.value.id, "page": offset}
         html = await self._get(INDEX_PATH, params=params)
         parser = HTMLParser(html)
 
         news_tag = parser.css_first(
             "body > table:nth-child(4) > tbody > tr > td:nth-child(3) > table:nth-child(8) > tbody"
         )
+        if news_tag is None:
+            return []  # offset is too big
         competitions: list[Competition] = []
         tr_tags = news_tag.css("tr")
         for i in range(0, len(tr_tags), 5):
@@ -186,14 +190,16 @@ class TmMoscowAPI:
                 "",
                 title,
                 flags=re.IGNORECASE,
-            ).strip().removesuffix(".")
+            )
+            .strip()
+            .removesuffix(".")
         )
 
         updated_at_tags = metadata_tag.css("b")
         if len(updated_at_tags) >= 1:
             updated_at_tag = None
             for tag in updated_at_tags:
-                if tag.text(strip=True):
+                if "обновлено" in tag.text(strip=True):
                     updated_at_tag = tag
                     break
             if updated_at_tag is None:
@@ -231,7 +237,14 @@ class TmMoscowAPI:
         logo_url = logo_url_tag.attributes.get("src") if logo_url_tag else None
         for link_tag in metadata_tag.css("a"):
             link_tag.decompose()
-        date, location = map(str.strip, metadata_tag.text(strip=True).split(",", maxsplit=1))
+
+        metadata_parts = metadata_tag.text(strip=True).split(",", maxsplit=1)
+        if len(metadata_parts) == 2:
+            date, location = map(str.strip, metadata_parts)
+        elif len(metadata_parts) == 1:
+            date, location = metadata_parts[0], metadata_parts[0]
+        else:
+            raise RuntimeError(f"metadata_parts len is {len(metadata_parts)}, not 2 or 1")
 
         views = int("".join(re.findall(r"\d", views_tag.text(strip=True)))) if views_tag else None
 
