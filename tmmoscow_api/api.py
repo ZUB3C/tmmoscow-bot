@@ -8,7 +8,8 @@ from urllib.parse import parse_qs, urljoin, urlparse
 
 import aiohttp
 from selectolax.parser import HTMLParser, Node
-from tmmoscow_api.types import (
+
+from .types import (
     BASE_URL,
     INDEX_PATH,
     Competition,
@@ -64,7 +65,9 @@ class TmMoscowAPI:
         )
         tr_tags = data_tag.css("tr")
         competition = self._parse_competition(
-            tr_tags[:9], competition_parse_type=_CompetitionParseType.FROM_COMPETITION
+            tr_tags[:9],
+            competition_parse_type=_CompetitionParseType.FROM_COMPETITION,
+            competition_id=id,
         )
 
         content_tag = tr_tags[5].css_first("td")
@@ -137,7 +140,10 @@ class TmMoscowAPI:
 
     @staticmethod
     def _parse_competition(
-        tr_tags: list[Node], competition_parse_type: _CompetitionParseType
+        tr_tags: list[Node],
+        competition_parse_type: _CompetitionParseType,
+        *,
+        competition_id: int | None = None,
     ) -> Competition:
         if not (len(tr_tags) >= 3 and all(len(tag.css("tr")) == 1 for tag in tr_tags)):
             raise ValueError("All tags should be <tr>")
@@ -159,35 +165,39 @@ class TmMoscowAPI:
                 if tag.text(strip=True):
                     updated_at_tag = tag
                     break
-            date_str = (
-                cast(Node, updated_at_tag)
-                .text(strip=True, separator=" ")
-                .lower()
-                .removeprefix("обновлено ")
-                .split(" ")[0]
-                .strip()
-            )
-            try:
-                updated_at = datetime.strptime(  # noqa: DTZ007
-                    date_str, "%d.%m.%Y"
+            if updated_at_tag is None:
+                updated_at = None
+            else:
+                date_str = (
+                    cast(Node, updated_at_tag)
+                    .text(strip=True, separator=" ")
+                    .lower()
+                    .removeprefix("обновлено ")
+                    .split(" ")[0]
+                    .strip()
                 )
-            except ValueError:
-                updated_at = date_str  # type: ignore[assignment]
-            updated_at_tags[1 if len(updated_at_tags) >= 2 else 0].decompose()
+                try:
+                    updated_at = datetime.strptime(  # noqa: DTZ007
+                        date_str, "%d.%m.%Y"
+                    )
+                except ValueError:
+                    updated_at = date_str  # type: ignore[assignment]
+                updated_at_tags[1 if len(updated_at_tags) >= 2 else 0].decompose()
         else:
             updated_at = None
 
         if competition_parse_type is _CompetitionParseType.FROM_NEWS:
             competition_url_tag = title_tag
+            competition_url = competition_url_tag.css_first("td > a").attributes.get("href")
+            parsed_url = urlparse(competition_url)
+            query_params: dict[str, list[str]] = parse_qs(str(parsed_url.query))
+            id_value = int(query_params.get("id", (-1,))[0])
         elif competition_parse_type is _CompetitionParseType.FROM_COMPETITION:
-            competition_url_tag = metadata_tag
+            if not isinstance(competition_id, int):
+                raise ValueError(f"competition_id should be int, not {competition_id}")
+            id_value = competition_id
         else:
             raise ValueError("competition_parse_type should be _CompetitionParseType type")
-
-        competition_url = competition_url_tag.css_first("td > a").attributes.get("href")
-        parsed_url = urlparse(competition_url)
-        query_params: dict[str, list[str]] = parse_qs(str(parsed_url.query))
-        id_value = int(query_params.get("id", (-1,))[0])
 
         logo_url_tag = metadata_tag.css_first("a > img")
         logo_url = logo_url_tag.attributes.get("src") if logo_url_tag else None
