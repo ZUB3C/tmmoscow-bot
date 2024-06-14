@@ -174,18 +174,20 @@ class TmMoscowAPI:
                 raise RuntimeError(f"Couldn't convert {category_id=} to NewsCategory")
         else:
             raise ValueError("competition_parse_type should be _CompetitionParseType type")
-        title_suffix_templates = [
-            "Дистанции - %s.",
-            "Дистанции - %s",
-            "Дистанции %s.",
-            "Дистанции %s",
-            "%s.",
-            "%s",
+        title_suffixes = [
+            r"Дистанции\s?-\s?{}",
+            "Дистанции {}",
+            "{}",
         ]
         category_title = category.value.title.lower()
-        for title_suffix in title_suffix_templates:
-            title = title.removesuffix(title_suffix % category_title)
-        title.removesuffix(".")
+        title = (
+            re.sub(
+                rf'({"|".join(suffix.format(category_title) for suffix in title_suffixes)}).*$',
+                "",
+                title,
+                flags=re.IGNORECASE,
+            ).strip().removesuffix(".")
+        )
 
         updated_at_tags = metadata_tag.css("b")
         if len(updated_at_tags) >= 1:
