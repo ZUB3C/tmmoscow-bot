@@ -146,6 +146,7 @@ class TmMoscowAPI:
         tr_tags: list[Node],
         competition_parse_type: _CompetitionParseType,
         category: NewsCategory | None = None,
+        clear_title: bool = True,
         *,
         competition_id: int | None = None,
     ) -> Competition:
@@ -172,22 +173,25 @@ class TmMoscowAPI:
                 raise RuntimeError(f"Couldn't convert {category_id=} to NewsCategory")
         else:
             raise ValueError("competition_parse_type should be _CompetitionParseType type")
-        title_suffixes = [
-            r"Дистанции\s?-\s?{}",
-            r"Дистанции\s?{}",
-            "{}",
-        ]
-        category_title = category.value.title.lower()
-        suffixes_pattern = "|".join(
-            suffix.format(re.escape(category_title)) for suffix in title_suffixes
-        )
-        title_pattern = rf"\.?\s*?({suffixes_pattern})$"
-        title = re.sub(
-            title_pattern,
-            "",
-            title,
-            flags=re.IGNORECASE,
-        )
+        if clear_title:
+            title_suffixes = [
+                r"Дистанции\s?-\s?{}",
+                r"Дистанции\s?{}",
+                "{}",
+            ]
+            category_title = category.value.title.lower()
+            suffixes_pattern = "|".join(
+                suffix.format(re.escape(category_title)) for suffix in title_suffixes
+            )
+            title_pattern = rf"\.?\s*?({suffixes_pattern})$"
+            title = re.sub(
+                title_pattern,
+                "",
+                title,
+                flags=re.IGNORECASE,
+            )
+        else:
+            title = title.removesuffix(".")
 
         updated_at_tags = metadata_tag.css("b")
         if len(updated_at_tags) >= 1:
