@@ -174,19 +174,19 @@ class TmMoscowAPI:
             raise ValueError("competition_parse_type should be _CompetitionParseType type")
         title_suffixes = [
             r"Дистанции\s?-\s?{}",
-            "Дистанции {}",
+            r"Дистанции\s?{}",
             "{}",
         ]
         category_title = category.value.title.lower()
-        title = (
-            re.sub(
-                rf'({"|".join(suffix.format(category_title) for suffix in title_suffixes)}).*$',
-                "",
-                title,
-                flags=re.IGNORECASE,
-            )
-            .strip()
-            .removesuffix(".")
+        suffixes_pattern = "|".join(
+            suffix.format(re.escape(category_title)) for suffix in title_suffixes
+        )
+        title_pattern = rf"\.?\s*?({suffixes_pattern})$"
+        title = re.sub(
+            title_pattern,
+            "",
+            title,
+            flags=re.IGNORECASE,
         )
 
         updated_at_tags = metadata_tag.css("b")
