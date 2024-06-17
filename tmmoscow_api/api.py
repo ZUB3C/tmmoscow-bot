@@ -204,8 +204,7 @@ class TmMoscowAPI:
                 updated_at = None
             else:
                 date_str = (
-                    cast(Node, updated_at_tag)
-                    .text(strip=True, separator=" ")
+                    updated_at_tag.text(strip=True, separator=" ")
                     .lower()
                     .removeprefix("обновлено ")
                     .split(" ")[0]
