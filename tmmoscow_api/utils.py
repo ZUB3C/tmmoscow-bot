@@ -1,8 +1,8 @@
 from datetime import datetime
 from typing import cast
-from urllib.parse import parse_qs, urlparse
 
 from selectolax.parser import HTMLParser
+from yarl import URL
 
 from .consts import TIMEZONE
 
@@ -12,9 +12,7 @@ def get_current_time() -> datetime:
 
 
 def get_url_parameter_value(url: str, parameter: str) -> str:
-    parsed_url = urlparse(url)
-    query_params: dict[str, list[str]] = parse_qs(str(parsed_url.query))
-    return query_params.get(parameter)[0]
+    return URL(url).query.get(parameter, "")
 
 
 def get_body_html(parser: HTMLParser) -> str:
