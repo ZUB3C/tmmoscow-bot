@@ -92,15 +92,11 @@ class TmMoscowAPI:
             line_parser = HTMLParser(line_html)
 
             b_tag = line_parser.css_first("b")
-            if b_tag:
+            if b_tag and b_tag.text(strip=True):
                 if set(line_parser.text(strip=True)) == {"="}:
                     continue
                 text = b_tag.text(strip=True)
-                if all(
-                    char.isupper() or char.isspace()
-                    for char in text
-                    if char.isalpha() or char.isspace()
-                ):
+                if all(char.isupper() for char in text if char.isalpha()):
                     if current_title:
                         content_blocks.append(
                             ContentBlock(title=current_title, lines=current_content_lines)
@@ -122,6 +118,8 @@ class TmMoscowAPI:
                     for attr in node.attributes:
                         if attr != "href":
                             del node.attrs[attr]  # type: ignore[attr-defined]
+                        else:
+                            node.attrs["href"] = urljoin(BASE_URL, node.attributes["href"])
                 current_content_lines.append(
                     ContentLine(html=get_body_html(line_parser), comment=comment)
                 )
