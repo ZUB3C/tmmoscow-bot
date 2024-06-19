@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 import aiohttp
 from selectolax.parser import HTMLParser, Node
 
-from .enums import NewsCategory, _CompetitionParseType
+from .enums import NewsCategory, _ParseCompetitionFrom
 from .types import (
     BASE_URL,
     INDEX_PATH,
@@ -36,7 +36,7 @@ class TmMoscowAPI:
         if category in (NewsCategory.IN_MOSCOW, NewsCategory.IN_RUSSIA):
             raise ValueError("NewsCategory.IN_MOSCOW, NewsCategory.IN_RUSSIA aren't supported yet")
 
-        params = {"go": "News", "in": "cat", "id": category.value.id, "page": offset}
+        params = {"go": "News", "in": "cat", "id": category.id, "page": offset}
         html = await self._get(INDEX_PATH, params=params)
         parser = HTMLParser(html)
 
@@ -52,7 +52,7 @@ class TmMoscowAPI:
             competition = self._parse_competition(
                 tr_tags=tags_chunk,
                 category=category,
-                competition_parse_type=_CompetitionParseType.FROM_NEWS,
+                parse_competition_from=_ParseCompetitionFrom.NEWS,
             )
             competitions.append(competition)
         return competitions
@@ -69,7 +69,7 @@ class TmMoscowAPI:
         tr_tags = data_tag.css("tr")
         competition = self._parse_competition(
             tr_tags=tr_tags[:9],
-            competition_parse_type=_CompetitionParseType.FROM_COMPETITION,
+            parse_competition_from=_ParseCompetitionFrom.COMPETITION,
             competition_id=id,
         )
 
@@ -144,7 +144,7 @@ class TmMoscowAPI:
     @staticmethod
     def _parse_competition(
         tr_tags: list[Node],
-        competition_parse_type: _CompetitionParseType,
+        parse_competition_from: _ParseCompetitionFrom,
         category: NewsCategory | None = None,
         clear_title: bool = True,
         *,
@@ -152,34 +152,34 @@ class TmMoscowAPI:
     ) -> Competition:
         if not (len(tr_tags) >= 3 and all(len(tag.css("tr")) == 1 for tag in tr_tags)):
             raise ValueError("All tags should be <tr>")
-        if competition_parse_type is _CompetitionParseType.FROM_NEWS:
+        if not isinstance(parse_competition_from, _ParseCompetitionFrom):
+            raise ValueError("competition_parse_type should be _CompetitionParseType type")
+        if parse_competition_from is _ParseCompetitionFrom.NEWS:
             if category is None:
                 raise ValueError("Give category argument of type NewsCategory")
             title_tag, metadata_tag, views_tag = tr_tags[:3]
             title = title_tag.text(strip=True)
-        elif competition_parse_type is _CompetitionParseType.FROM_COMPETITION:
+        elif parse_competition_from is _ParseCompetitionFrom.COMPETITION:
             title_tag = tr_tags[0]
             metadata_tag = tr_tags[3]
             views_tag = tr_tags[8]
             title = title_tag.css_first("td > font").text(strip=True)
 
-            category_url = title_tag.css_first("td > a").attributes.get("href")
+            category_url = cast(str, title_tag.css_first("td > a").attributes.get("href", ""))
             category_id = int(get_url_parameter_value(url=category_url, parameter="id"))
             for news_category in NewsCategory:
-                if category_id == news_category.value.id:
+                if category_id == news_category.id:
                     category = news_category
                     break
             if category is None:
                 raise RuntimeError(f"Couldn't convert {category_id=} to NewsCategory")
-        else:
-            raise ValueError("competition_parse_type should be _CompetitionParseType type")
         if clear_title:
             title_suffixes = [
                 r"Дистанции\s?-\s?{}",
                 r"Дистанции\s?{}",
                 "{}",
             ]
-            category_title = category.value.title.lower()
+            category_title = category.title.lower()
             suffixes_pattern = "|".join(
                 suffix.format(re.escape(category_title)) for suffix in title_suffixes
             )
@@ -220,15 +220,13 @@ class TmMoscowAPI:
         else:
             updated_at = None
 
-        if competition_parse_type is _CompetitionParseType.FROM_NEWS:
-            competition_url = title_tag.css_first("td > a").attributes.get("href")
+        if parse_competition_from is _ParseCompetitionFrom.NEWS:
+            competition_url = cast(str, title_tag.css_first("td > a").attributes.get("href", ""))
             id_value = int(get_url_parameter_value(url=competition_url, parameter="id"))
-        elif competition_parse_type is _CompetitionParseType.FROM_COMPETITION:
+        elif parse_competition_from is _ParseCompetitionFrom.COMPETITION:
             if not isinstance(competition_id, int):
                 raise ValueError(f"competition_id should be int, not {competition_id}")
             id_value = competition_id
-        else:
-            raise ValueError("competition_parse_type should be _CompetitionParseType type")
 
         logo_url_tag = metadata_tag.css_first("a > img")
         logo_url = logo_url_tag.attributes.get("src") if logo_url_tag else None
