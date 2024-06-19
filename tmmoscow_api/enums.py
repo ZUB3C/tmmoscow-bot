@@ -1,29 +1,37 @@
 from enum import Enum, auto
 
-from tmmoscow_api.types import NewsType
-
 
 class NewsCategory(Enum):
     # Types of distance
-    INDOORS = NewsType(id=1, title="В закрытых помещениях")
-    WALKING = NewsType(id=2, title="Пешеходные")
-    SKI = NewsType(id=3, title="Лыжные")
-    MOUNTAIN = NewsType(id=4, title="Горные")
-    SPELEO = NewsType(id=5, title="Спелео")
-    COMBINED_SRW = NewsType(id=6, title="Комбинированные (ПСР)")
-    MISCELLANEOUS = NewsType(id=7, title="Разное")
-    AQUATIC = NewsType(id=10, title="Водные")
-    BICYCLE = NewsType(id=11, title="Велосипедные")
-    AUTO_MOTO = NewsType(id=12, title="Авто-мото")
-    EQUESTRIAN = NewsType(id=13, title="Конные")
-    SAILING = NewsType(id=14, title="Парусные")
-    NORDIC_WALKING = NewsType(id=15, title="Северная ходьба")
+    INDOORS = (1, "В закрытых помещениях")
+    WALKING = (2, "Пешеходные")
+    SKI = (3, "Лыжные")
+    MOUNTAIN = (4, "Горные")
+    SPELEO = (5, "Спелео")
+    COMBINED_SRW = (6, "Комбинированные (ПСР)")
+    AQUATIC = (10, "Водные")
+    BICYCLE = (11, "Велосипедные")
+    AUTO_MOTO = (12, "Авто-мото")
+    EQUESTRIAN = (13, "Конные")
+    SAILING = (14, "Парусные")
+    NORDIC_WALKING = (15, "Северная ходьба")
 
     # Locations
-    IN_MOSCOW = NewsType(id=8, title="В Москве")
-    IN_RUSSIA = NewsType(id=9, title="В России")
+    IN_MOSCOW = (8, "В Москве")
+    IN_RUSSIA = (9, "В России")
+
+    # Other
+    MISCELLANEOUS = (7, "Разное")
+
+    def __init__(self, id: int, title: str) -> None:
+        self.id = id
+        self.title = title
+
+    @property
+    def url(self) -> str:
+        return f"http://www.tmmoscow.ru/index.php?go=News&in=cat&id={self.id}"
 
 
-class _CompetitionParseType(Enum):
-    FROM_NEWS = auto()
-    FROM_COMPETITION = auto()
+class _ParseCompetitionFrom(Enum):
+    NEWS = auto()
+    COMPETITION = auto()
