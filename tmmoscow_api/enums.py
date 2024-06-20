@@ -1,7 +1,17 @@
 from enum import Enum, auto
 
 
-class NewsCategory(Enum):
+class BaseCategory(Enum):
+    def __init__(self, id: int, title: str) -> None:
+        self.id = id
+        self.title = title
+
+    @property
+    def url(self) -> str:
+        return f"http://www.tmmoscow.ru/index.php?go=News&in=cat&id={self.id}"
+
+
+class DistanceType(BaseCategory):
     # Types of distance
     INDOORS = (1, "В закрытых помещениях")
     WALKING = (2, "Пешеходные")
@@ -16,6 +26,8 @@ class NewsCategory(Enum):
     SAILING = (14, "Парусные")
     NORDIC_WALKING = (15, "Северная ходьба")
 
+
+class NewsCategory(BaseCategory):
     # Locations
     IN_MOSCOW = (8, "В Москве")
     IN_RUSSIA = (9, "В России")
@@ -23,15 +35,7 @@ class NewsCategory(Enum):
     # Other
     MISCELLANEOUS = (7, "Разное")
 
-    def __init__(self, id: int, title: str) -> None:
-        self.id = id
-        self.title = title
-
-    @property
-    def url(self) -> str:
-        return f"http://www.tmmoscow.ru/index.php?go=News&in=cat&id={self.id}"
-
 
 class _ParseCompetitionFrom(Enum):
-    NEWS = auto()
-    COMPETITION = auto()
+    CATEGORY_PAGE = auto()
+    COMPETITION_PAGE = auto()
