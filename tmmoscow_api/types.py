@@ -1,11 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import NamedTuple
 
-
-class NewsType(NamedTuple):
-    id: int
-    title: str
+from tmmoscow_api.consts import INDEX_URL
 
 
 @dataclass(frozen=True)
@@ -24,23 +20,26 @@ class Competition:
 
 
 @dataclass(frozen=True)
-class ContentLine:
+class BaseLine:
     html: str
     comment: str | None
 
 
 @dataclass(frozen=True)
+class ContentLine(BaseLine): ...
+
+
+@dataclass(frozen=True)
+class ContentSubtitle(BaseLine): ...
+
+
+@dataclass(frozen=True)
 class ContentBlock:
     title: str
-    lines: list[ContentLine]
+    lines: list[ContentLine | ContentSubtitle]
 
 
 @dataclass(frozen=True)
 class CompetitionInfo(Competition):
     author: str | None
     content_blocks: list[ContentBlock]
-
-
-BASE_URL = "http://www.tmmoscow.ru"
-INDEX_PATH = "/index.php"
-INDEX_URL = f"{BASE_URL}{INDEX_PATH}"
