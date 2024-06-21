@@ -1,5 +1,6 @@
 import logging
 import re
+import typing
 from datetime import datetime
 from types import TracebackType
 from typing import Any, Final, cast
@@ -8,14 +9,14 @@ from urllib.parse import urljoin
 import aiohttp
 from selectolax.parser import HTMLParser, Node
 
+from .consts import BASE_URL, INDEX_PATH
 from .enums import DistanceType, _ParseCompetitionFrom
 from .types import (
-    BASE_URL,
-    INDEX_PATH,
     Competition,
     CompetitionInfo,
     ContentBlock,
     ContentLine,
+    ContentSubtitle,
 )
 from .utils import get_body_html, get_url_parameter_value
 
@@ -85,15 +86,19 @@ class TmMoscowAPI:
         )
 
         current_title = ""
-        current_content_lines: list[ContentLine] = []
+        current_content_lines: list[ContentLine | ContentSubtitle] = []
         for line_html in content_lines:
             line_parser = HTMLParser(line_html)
 
-            b_tag = line_parser.css_first("b")
-            if b_tag and b_tag.text(strip=True):
+            title_tag = line_parser.css_first("b > font")
+            if (
+                title_tag
+                and title_tag.text(strip=True)
+                and title_tag.attributes.get("color") == "green"
+            ):
                 if set(line_parser.text(strip=True)) == {"="}:
                     continue
-                text = b_tag.text(strip=True)
+                text = title_tag.text(strip=True)
                 if all(char.isupper() for char in text if char.isalpha()):
                     if current_title:
                         content_blocks.append(
@@ -117,10 +122,18 @@ class TmMoscowAPI:
                         if attr != "href":
                             del node.attrs[attr]  # type: ignore[attr-defined]
                         else:
-                            node.attrs["href"] = urljoin(BASE_URL, node.attributes["href"])
-                current_content_lines.append(
-                    ContentLine(html=get_body_html(line_parser), comment=comment)
-                )
+                            node.attrs["href"] = urljoin(BASE_URL, node.attributes["href"])  # type: ignore[index]
+                # Check if line is a subtitle or content line
+                subtitle_tag = line_parser.css_first("b")
+                if typing.TYPE_CHECKING:
+                    content_line: ContentLine | ContentSubtitle
+                if subtitle_tag and subtitle_tag.text(strip=True):
+                    content_line = ContentSubtitle(
+                        html=get_body_html(line_parser), comment=comment
+                    )
+                else:
+                    content_line = ContentLine(html=get_body_html(line_parser), comment=comment)
+                current_content_lines.append(content_line)
         content_blocks.append(ContentBlock(title=current_title, lines=current_content_lines))
 
         author = tr_tags[7].css_first("td").text(strip=True, deep=False)
