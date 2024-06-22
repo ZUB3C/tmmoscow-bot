@@ -128,12 +128,19 @@ class TmMoscowAPI:
                 # Check if line is a subtitle or content line
                 if typing.TYPE_CHECKING:
                     content_line: ContentLine | ContentSubtitle
-                if subtitle_tag and subtitle_tag.text(strip=True):
-                    content_line = ContentSubtitle(
-                        html=get_body_html(line_parser), comment=comment
-                    )
+                content_line_pattern = r"\s*-\s.*"
+                body_html = get_body_html(line_parser)
+                if re.match(content_line_pattern, body_html):
+                    body_html = re.sub(r"^\s*-\s", "", body_html)
+                    content_line = ContentLine(html=body_html, comment=comment)
                 else:
-                    content_line = ContentLine(html=get_body_html(line_parser), comment=comment)
+                    subtitle_tag = line_parser.css_first("b")
+                    if subtitle_tag and subtitle_tag.text(strip=True):
+                        content_line = ContentSubtitle(
+                            html=line_parser.body.child.child.html, comment=comment
+                        )
+                    else:
+                        content_line = ContentLine(html=body_html, comment=comment)
                 current_content_lines.append(content_line)
         content_blocks.append(ContentBlock(title=current_title, lines=current_content_lines))
 
