@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import typing
@@ -9,7 +10,7 @@ from urllib.parse import urljoin
 import aiohttp
 from selectolax.parser import HTMLParser, Node
 
-from .consts import BASE_URL, INDEX_PATH
+from .consts import BASE_URL, DEFAULT_HEADERS, HTML_ENCODING, INDEX_PATH
 from .enums import DistanceType, _ParseCompetitionFrom
 from .types import (
     Competition,
@@ -28,6 +29,7 @@ class TmMoscowAPI:
         self._session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(timeout),
             connector=aiohttp.TCPConnector(limit=max_requests_per_second),
+            headers=DEFAULT_HEADERS,
         )
 
     async def get_recent_competitions(
@@ -124,7 +126,6 @@ class TmMoscowAPI:
                         else:
                             node.attrs["href"] = urljoin(BASE_URL, node.attributes["href"])  # type: ignore[index]
                 # Check if line is a subtitle or content line
-                subtitle_tag = line_parser.css_first("b")
                 if typing.TYPE_CHECKING:
                     content_line: ContentLine | ContentSubtitle
                 if subtitle_tag and subtitle_tag.text(strip=True):
@@ -268,7 +269,7 @@ class TmMoscowAPI:
         async with self._session.request(method="GET", url=url, **kwargs) as response:
             logger.debug("Sent GET request: %d: %s", response.status, str(response.url))
             response.raise_for_status()
-            return await response.text()
+            return await response.text(encoding=HTML_ENCODING)
 
     async def close(self) -> None:
         if not self._session.closed:
