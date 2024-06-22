@@ -4,7 +4,7 @@ from typing import cast
 from selectolax.parser import HTMLParser
 from yarl import URL
 
-from .consts import TIMEZONE
+from .const import TIMEZONE
 
 
 def get_current_time() -> datetime:

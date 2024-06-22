@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from tmmoscow_api.consts import INDEX_URL
+from tmmoscow_api.const import INDEX_URL
 
 
 @dataclass(frozen=True)
@@ -20,17 +20,17 @@ class Competition:
 
 
 @dataclass(frozen=True)
-class BaseLine:
+class _BaseLine:
     html: str
     comment: str | None
 
 
 @dataclass(frozen=True)
-class ContentLine(BaseLine): ...
+class ContentLine(_BaseLine): ...
 
 
 @dataclass(frozen=True)
-class ContentSubtitle(BaseLine): ...
+class ContentSubtitle(_BaseLine): ...
 
 
 @dataclass(frozen=True)
@@ -43,3 +43,4 @@ class ContentBlock:
 class CompetitionInfo(Competition):
     author: str | None
     content_blocks: list[ContentBlock]
+    created_at: datetime | None

@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 import aiohttp
 from selectolax.parser import HTMLParser, Node
 
-from .consts import BASE_URL, DEFAULT_HEADERS, HTML_ENCODING, INDEX_PATH
+from .const import BASE_URL, DEFAULT_HEADERS, HTML_ENCODING, INDEX_PATH
 from .enums import DistanceType, _ParseCompetitionFrom
 from .types import (
     Competition,
@@ -58,10 +58,25 @@ class TmMoscowAPI:
             competitions.append(competition)
         return competitions
 
-    async def get_competition_data(self, id: int) -> CompetitionInfo:
+    async def get_competition_data(
+        self, id: int, parse_created_at: bool = False
+    ) -> CompetitionInfo:
         """Get detailed information about competition"""
         params = {"go": "News", "in": "view", "id": id}
-        html = await self._get(INDEX_PATH, params=params)
+        if not parse_created_at:
+            html = await self._get(INDEX_PATH, params=params)
+            created_at = None
+        else:
+            params_created_at = {"go": "News", "file": "print", "id": id}
+            html, created_at_html = await asyncio.gather(
+                asyncio.create_task(self._get(INDEX_PATH, params=params)),
+                asyncio.create_task(self._get(INDEX_PATH, params=params_created_at)),
+            )
+            parser_created_at = HTMLParser(created_at_html)
+            _, created_at_str = (
+                parser_created_at.css_first("body > div > b").text(strip=True).split(" | ", 1)
+            )
+            created_at = datetime.strptime(created_at_str, "%d.%m.%Y %H:%M")  # noqa: DTZ007
         parser = HTMLParser(html)
 
         data_tag = parser.css_first(
@@ -156,6 +171,7 @@ class TmMoscowAPI:
             logo_url=competition.logo_url,
             author=author,
             content_blocks=content_blocks,
+            created_at=created_at,
         )
 
     @staticmethod
@@ -196,7 +212,11 @@ class TmMoscowAPI:
                 r"Дистанции\s?{}",
                 "{}",
             ]
-            category_title = category.title.lower()
+            category_title = (
+                category.title.lower()
+                if category != DistanceType.COMBINED_SRW
+                else "комбинированные"
+            )
             suffixes_pattern = "|".join(
                 suffix.format(re.escape(category_title)) for suffix in title_suffixes
             )
