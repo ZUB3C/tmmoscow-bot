@@ -1,7 +1,7 @@
 from enum import Enum, auto
 
 
-class BaseCategory(Enum):
+class _BaseCategory(Enum):
     def __init__(self, id: int, title: str) -> None:
         self.id = id
         self.title = title
@@ -11,7 +11,7 @@ class BaseCategory(Enum):
         return f"http://www.tmmoscow.ru/index.php?go=News&in=cat&id={self.id}"
 
 
-class DistanceType(BaseCategory):
+class DistanceType(_BaseCategory):
     # Types of distance
     INDOORS = (1, "В закрытых помещениях")
     WALKING = (2, "Пешеходные")
@@ -27,7 +27,7 @@ class DistanceType(BaseCategory):
     NORDIC_WALKING = (15, "Северная ходьба")
 
 
-class NewsCategory(BaseCategory):
+class NewsCategory(_BaseCategory):
     # Locations
     IN_MOSCOW = (8, "В Москве")
     IN_RUSSIA = (9, "В России")
