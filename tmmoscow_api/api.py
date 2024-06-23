@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 import aiohttp
 from selectolax.parser import HTMLParser, Node
 
-from .const import BASE_URL, DEFAULT_HEADERS, HTML_ENCODING, INDEX_PATH
+from .const import BASE_URL, DEFAULT_HEADERS, HTML_ENCODING, ID_TO_DISTANCE_TYPE, INDEX_PATH
 from .enums import DistanceType, _ParseCompetitionFrom
 from .types import (
     Competition,
@@ -52,7 +52,7 @@ class TmMoscowAPI:
             tags_chunk = tr_tags[i : i + 5]
             competition = self._parse_competition(
                 tr_tags=tags_chunk,
-                category=distance_type,
+                distance_type=distance_type,
                 parse_competition_from=_ParseCompetitionFrom.CATEGORY_PAGE,
             )
             competitions.append(competition)
@@ -152,7 +152,8 @@ class TmMoscowAPI:
                     subtitle_tag = line_parser.css_first("b")
                     if subtitle_tag and subtitle_tag.text(strip=True):
                         content_line = ContentSubtitle(
-                            html=line_parser.body.child.child.html, comment=comment
+                            html=line_parser.body.child.child.html,  # type: ignore[union-attr,arg-type]
+                            comment=comment,
                         )
                     else:
                         content_line = ContentLine(html=body_html, comment=comment)
@@ -178,7 +179,7 @@ class TmMoscowAPI:
     def _parse_competition(
         tr_tags: list[Node],
         parse_competition_from: _ParseCompetitionFrom,
-        category: DistanceType | None = None,
+        distance_type: DistanceType | None = None,
         clear_title: bool = True,
         *,
         competition_id: int | None = None,
@@ -188,7 +189,7 @@ class TmMoscowAPI:
         if not isinstance(parse_competition_from, _ParseCompetitionFrom):
             raise ValueError("competition_parse_type should be _CompetitionParseType type")
         if parse_competition_from is _ParseCompetitionFrom.CATEGORY_PAGE:
-            if category is None:
+            if distance_type is None:
                 raise ValueError("Give category argument of type NewsCategory")
             title_tag, metadata_tag, views_tag = tr_tags[:3]
             title = title_tag.text(strip=True)
@@ -200,33 +201,11 @@ class TmMoscowAPI:
 
             category_url = cast(str, title_tag.css_first("td > a").attributes.get("href", ""))
             category_id = int(get_url_parameter_value(url=category_url, parameter="id"))
-            for news_category in DistanceType:
-                if category_id == news_category.id:
-                    category = news_category
-                    break
-            if category is None:
-                raise RuntimeError(f"Couldn't convert {category_id=} to NewsCategory")
+            distance_type = ID_TO_DISTANCE_TYPE.get(category_id)
+            if distance_type is None:
+                raise RuntimeError(f"Couldn't convert {category_id=} to DistanceType")
         if clear_title:
-            title_suffixes = [
-                r"Дистанции\s?-\s?{}",
-                r"Дистанции\s?{}",
-                "{}",
-            ]
-            category_title = (
-                category.title.lower()
-                if category != DistanceType.COMBINED_SRW
-                else "комбинированные"
-            )
-            suffixes_pattern = "|".join(
-                suffix.format(re.escape(category_title)) for suffix in title_suffixes
-            )
-            title_pattern = rf"\.?\s*?({suffixes_pattern})$"
-            title = re.sub(
-                title_pattern,
-                "",
-                title,
-                flags=re.IGNORECASE,
-            )
+            title = TmMoscowAPI._clear_title(title, distance_type)
         else:
             title = title.removesuffix(".")
 
@@ -289,6 +268,72 @@ class TmMoscowAPI:
             updated_at=updated_at,
             logo_url=logo_url,
         )
+
+    @staticmethod
+    def _get_suffixes_distances_on_vehicles(word: str, in_parentheses: str) -> list[str]:
+        """Generate title suffixes for distances on vehicles"""
+        return [
+            r"Дистанции\s*на\s*средствах\s*передвижения",
+            rf"Дистанции\s*-?\s*на\s*средствах\s*передвижения\s*\({in_parentheses}\)",
+            rf"Дистанции\s*на\s*средствах\s*передвижения.\s*{word}",
+        ]
+
+    @staticmethod
+    def _clear_title(title: str, distance_type: DistanceType) -> str:
+        if typing.TYPE_CHECKING:
+            title_suffixes: list[str]
+        match distance_type:
+            case DistanceType.INDOORS:
+                title_suffixes = [
+                    "Дистанции пешеходные",
+                    "Дистанции пешеходные в закрытых помещения",
+                ]
+            case DistanceType.WALKING:
+                title_suffixes = [
+                    r"Дистанции\s*пешеходные",
+                    r"Дистанции\s?-\s?пешеходные",
+                    r"Дистанции\s?пешеходные",
+                ]
+            case (
+                DistanceType.SKI,
+                DistanceType.MOUNTAIN,
+                DistanceType.SPELEO,
+                DistanceType.AQUATIC,
+            ):
+                title_suffixes = [rf"Дистанции\s*{distance_type.title.lower()}"]
+            case DistanceType.COMBINED_SRW:
+                title_suffixes = [
+                    r"Дистанции\s*комбинированные",
+                    r"Дистанция\s*-\s*комбинированная",
+                ]
+            case DistanceType.BICYCLE:
+                title_suffixes = [
+                    *TmMoscowAPI._get_suffixes_distances_on_vehicles("Вело(сипед)?", "вело"),
+                    "Дистанции\\s*велосипедные",
+                ]
+            case DistanceType.AUTO_MOTO:
+                title_suffixes = TmMoscowAPI._get_suffixes_distances_on_vehicles(
+                    "Авто", "авто"
+                )
+            case DistanceType.EQUESTRIAN:
+                title_suffixes = TmMoscowAPI._get_suffixes_distances_on_vehicles(
+                    r"Конные\s*(дистанции)?", "кони|конные"
+                )
+            case DistanceType.SAILING:
+                title_suffixes = [r"Дистанции\s*парусные", r"Дистанция\s*-?\s*парусная"]
+            case DistanceType.NORDIC_WALKING:
+                title_suffixes = [r"Северная\s*ходьба"]
+            case _:
+                raise ValueError
+
+        suffixes_pattern = "|".join([rf"{suffix}\.?" for suffix in title_suffixes])
+        title_pattern = rf"\s*({suffixes_pattern})(?=.*)?"
+        return re.sub(
+            title_pattern,
+            "",
+            title,
+            flags=re.IGNORECASE,
+        ).removesuffix(".")
 
     async def _get(self, path: str = "", url: str = "", **kwargs: Any) -> str:
         """Get html from full `url` or `path` relative to base url."""
