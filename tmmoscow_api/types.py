@@ -8,10 +8,10 @@ from tmmoscow_api.const import INDEX_URL
 class Competition:
     title: str
     id: int
-    event_dates: str
-    location: str
+    event_dates: str | None
+    location: str | None
     views: int | None
-    updated_at: datetime | str | None
+    updated_at: datetime | None
     logo_url: str | None
 
     @property

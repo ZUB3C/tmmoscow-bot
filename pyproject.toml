@@ -61,7 +61,7 @@ select = [
     "SIM", # flake8-simplify
     "RET", # flake8-return
     "YTT", # flake8-2020
-    "DTZ", # flake8-datetimez
+#    "DTZ", # flake8-datetimez
     "RUF", # ruff-specific rules
     "TCH", # flake8-type-checking
     "PTH", # flake8-use-pathlib

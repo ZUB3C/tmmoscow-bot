@@ -19,7 +19,7 @@ from .types import (
     ContentLine,
     ContentSubtitle,
 )
-from .utils import get_body_html, get_url_parameter_value
+from .utils import get_body_html, get_url_parameter_value, node_with_text
 
 logger: Final[logging.Logger] = logging.getLogger(name=__name__)
 
@@ -76,7 +76,7 @@ class TmMoscowAPI:
             _, created_at_str = (
                 parser_created_at.css_first("body > div > b").text(strip=True).split(" | ", 1)
             )
-            created_at = datetime.strptime(created_at_str, "%d.%m.%Y %H:%M")  # noqa: DTZ007
+            created_at = datetime.strptime(created_at_str, "%d.%m.%Y %H:%M")
         parser = HTMLParser(html)
 
         data_tag = parser.css_first(
@@ -96,7 +96,7 @@ class TmMoscowAPI:
             map(
                 str.strip,
                 filter(
-                    lambda html: HTMLParser(html).text(strip=True) != "",
+                    node_with_text,
                     cast(str, content_tag.html).split("<br>"),
                 ),
             )
@@ -210,40 +210,37 @@ class TmMoscowAPI:
         else:
             title = title.removesuffix(".")
 
-        updated_at_tags = metadata_tag.css("b")
-        if len(updated_at_tags) >= 1:
-            updated_at_tag = None
-            for tag in updated_at_tags:
-                if "обновлено" in tag.text(strip=True):
-                    updated_at_tag = tag
-                    break
-            if updated_at_tag is None:
-                updated_at = None
-            else:
-                date_str = (
-                    updated_at_tag.text(strip=True, separator=" ")
-                    .lower()
-                    .removeprefix("обновлено ")
-                    .split(" ")[0]
-                    .strip()
-                )
-                try:
-                    updated_at = datetime.strptime(  # noqa: DTZ007
-                        date_str, "%d.%m.%Y"
-                    )
-                except ValueError:
-                    updated_at = date_str  # type: ignore[assignment]
-                updated_at_tags[1 if len(updated_at_tags) >= 2 else 0].decompose()
-        else:
+        metadata_text = metadata_tag.text(strip=True, separator="\n")
+        metadata_lines: list[str] = list(
+            filter(lambda html: node_with_text(html=html), metadata_text.split("\n"))
+        )
+        if len(metadata_lines) < 2:
             updated_at = None
+        else:
+            updated_at_str = metadata_lines[1]
+            updated_at_parser = HTMLParser(html=updated_at_str)
+            if updated_at_parser.css_first("b"):
+                updated_at_str = updated_at_parser.css_first("b").text(strip=True).lower()
+            try:
+                updated_at = datetime.strptime(updated_at_str, "обновлено %d.%m.%Y")
+            except ValueError:
+                try:
+                    updated_at = datetime.strptime(updated_at_str, "обновлено: %d.%m.%Y")
+                except ValueError:
+                    updated_at = None
 
-        if parse_competition_from is _ParseCompetitionFrom.CATEGORY_PAGE:
-            competition_url = cast(str, title_tag.css_first("td > a").attributes.get("href", ""))
-            id_value = int(get_url_parameter_value(url=competition_url, parameter="id"))
-        elif parse_competition_from is _ParseCompetitionFrom.COMPETITION_PAGE:
-            if not isinstance(competition_id, int):
-                raise ValueError(f"competition_id should be int, not {competition_id}")
-            id_value = competition_id
+        match parse_competition_from:
+            case _ParseCompetitionFrom.CATEGORY_PAGE:
+                competition_url = cast(
+                    str, title_tag.css_first("td > a").attributes.get("href", "")
+                )
+                id_value = int(get_url_parameter_value(url=competition_url, parameter="id"))
+            case _ParseCompetitionFrom.COMPETITION_PAGE:
+                if not isinstance(competition_id, int):
+                    raise ValueError(f"competition_id should be int, not {competition_id}")
+                id_value = competition_id
+            case _ as unreachable:
+                typing.assert_never(unreachable)
 
         logo_url_tag = metadata_tag.css_first("a > img")
         logo_url = logo_url_tag.attributes.get("src") if logo_url_tag else None
@@ -252,13 +249,11 @@ class TmMoscowAPI:
         for link_tag in metadata_tag.css("a"):
             link_tag.decompose()
 
-        metadata_parts = metadata_tag.text(strip=True).split(",", maxsplit=1)
+        metadata_parts = metadata_lines[0].split(",", maxsplit=1)
         if len(metadata_parts) == 2:
             event_dates, location = map(str.strip, metadata_parts)
         elif len(metadata_parts) == 1:
             event_dates, location = metadata_parts[0], metadata_parts[0]
-        else:
-            raise RuntimeError(f"metadata_parts len is {len(metadata_parts)}, not 2 or 1")
 
         views = int("".join(re.findall(r"\d", views_tag.text(strip=True)))) if views_tag else None
 
