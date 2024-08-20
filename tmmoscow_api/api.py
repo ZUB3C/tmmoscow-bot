@@ -10,7 +10,15 @@ from urllib.parse import urljoin
 import aiohttp
 from selectolax.parser import HTMLParser, Node
 
-from .const import BASE_URL, DEFAULT_HEADERS, HTML_ENCODING, ID_TO_DISTANCE_TYPE, INDEX_PATH
+from .const import (
+    BASE_URL,
+    DEFAULT_HEADERS,
+    EVENT_DATES_PATTERN,
+    HTML_ENCODING,
+    ID_TO_DISTANCE_TYPE,
+    INDEX_PATH,
+    MONTH_NAME_TO_NUMBER,
+)
 from .enums import DistanceType, _ParseCompetitionFrom
 from .types import (
     Competition,
@@ -166,6 +174,8 @@ class TmMoscowAPI:
             title=competition.title,
             id=competition.id,
             event_dates=competition.event_dates,
+            event_begins_at=competition.event_begins_at,
+            event_ends_at=competition.event_ends_at,
             location=competition.location,
             views=competition.views,
             updated_at=competition.updated_at,
@@ -257,10 +267,13 @@ class TmMoscowAPI:
 
         views = int("".join(re.findall(r"\d", views_tag.text(strip=True)))) if views_tag else None
 
+        event_begins_at, event_ends_at = TmMoscowAPI._parse_date_range(metadata_text)
         return Competition(
             title=title,
             id=id_value,
             event_dates=event_dates,
+            event_begins_at=event_begins_at,
+            event_ends_at=event_ends_at,
             location=location,
             views=views,
             updated_at=updated_at,
@@ -330,6 +343,34 @@ class TmMoscowAPI:
             title,
             flags=re.IGNORECASE,
         ).removesuffix(".")
+
+    @staticmethod
+    def _parse_date_range(event_dates: str) -> tuple[datetime | None, datetime | None]:
+        match = EVENT_DATES_PATTERN.search(event_dates)
+        if not match:
+            return None, None
+
+        start_day = int(match.group("start_day"))
+        end_day = match.group("end_day") or start_day
+        start_month = match.group("start_month")
+        end_month = match.group("end_month")
+        year = int(match.group("end_year"))
+
+        if not start_month:
+            start_month = end_month
+        if not end_month:
+            end_month = start_month
+        try:
+            start_month_number = MONTH_NAME_TO_NUMBER[start_month.lower()]
+            end_month_number = MONTH_NAME_TO_NUMBER[end_month.lower()]
+        except KeyError as e:
+            print(f"{start_month=} {end_month=} {match}")
+            raise e
+
+        event_begins_at = datetime(year=year, month=start_month_number, day=start_day)
+        event_ends_at = datetime(year=year, month=end_month_number, day=int(end_day))
+
+        return event_begins_at, event_ends_at
 
     async def _get(self, path: str = "", url: str = "", **kwargs: Any) -> str:
         """Get html from full `url` or `path` relative to base url."""

@@ -9,6 +9,8 @@ class Competition:
     title: str
     id: int
     event_dates: str | None
+    event_begins_at: datetime | None
+    event_ends_at: datetime | None
     location: str | None
     views: int | None
     updated_at: datetime | None
