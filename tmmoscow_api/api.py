@@ -165,7 +165,7 @@ class TmMoscowAPI:
         return CompetitionInfo(
             title=competition.title,
             id=competition.id,
-            date=competition.date,
+            event_dates=competition.event_dates,
             location=competition.location,
             views=competition.views,
             updated_at=competition.updated_at,
@@ -186,24 +186,25 @@ class TmMoscowAPI:
     ) -> Competition:
         if not (len(tr_tags) >= 3 and all(len(tag.css("tr")) == 1 for tag in tr_tags)):
             raise ValueError("All tags should be <tr>")
-        if not isinstance(parse_competition_from, _ParseCompetitionFrom):
-            raise ValueError("competition_parse_type should be _CompetitionParseType type")
-        if parse_competition_from is _ParseCompetitionFrom.CATEGORY_PAGE:
-            if distance_type is None:
-                raise ValueError("Give category argument of type NewsCategory")
-            title_tag, metadata_tag, views_tag = tr_tags[:3]
-            title = title_tag.text(strip=True)
-        elif parse_competition_from is _ParseCompetitionFrom.COMPETITION_PAGE:
-            title_tag = tr_tags[0]
-            metadata_tag = tr_tags[3]
-            views_tag = tr_tags[8]
-            title = title_tag.css_first("td > font").text(strip=True)
+        match parse_competition_from:
+            case _ParseCompetitionFrom.CATEGORY_PAGE:
+                if distance_type is None:
+                    raise ValueError("Give category argument of type NewsCategory")
+                title_tag, metadata_tag, views_tag = tr_tags[:3]
+                title = title_tag.text(strip=True)
+            case _ParseCompetitionFrom.COMPETITION_PAGE:
+                title_tag = tr_tags[0]
+                metadata_tag = tr_tags[3]
+                views_tag = tr_tags[8]
+                title = title_tag.css_first("td > font").text(strip=True)
 
-            category_url = cast(str, title_tag.css_first("td > a").attributes.get("href", ""))
-            category_id = int(get_url_parameter_value(url=category_url, parameter="id"))
-            distance_type = ID_TO_DISTANCE_TYPE.get(category_id)
-            if distance_type is None:
-                raise RuntimeError(f"Couldn't convert {category_id=} to DistanceType")
+                category_url = cast(str, title_tag.css_first("td > a").attributes.get("href", ""))
+                category_id = int(get_url_parameter_value(url=category_url, parameter="id"))
+                distance_type = ID_TO_DISTANCE_TYPE.get(category_id)
+                if distance_type is None:
+                    raise RuntimeError(f"Couldn't convert {category_id=} to DistanceType")
+            case _ as unreachable:
+                typing.assert_never(unreachable)
         if clear_title:
             title = TmMoscowAPI._clear_title(title, distance_type)
         else:
@@ -246,14 +247,16 @@ class TmMoscowAPI:
 
         logo_url_tag = metadata_tag.css_first("a > img")
         logo_url = logo_url_tag.attributes.get("src") if logo_url_tag else None
+        if logo_url and BASE_URL not in logo_url:
+            logo_url = urljoin(BASE_URL, logo_url)
         for link_tag in metadata_tag.css("a"):
             link_tag.decompose()
 
         metadata_parts = metadata_tag.text(strip=True).split(",", maxsplit=1)
         if len(metadata_parts) == 2:
-            date, location = map(str.strip, metadata_parts)
+            event_dates, location = map(str.strip, metadata_parts)
         elif len(metadata_parts) == 1:
-            date, location = metadata_parts[0], metadata_parts[0]
+            event_dates, location = metadata_parts[0], metadata_parts[0]
         else:
             raise RuntimeError(f"metadata_parts len is {len(metadata_parts)}, not 2 or 1")
 
@@ -262,7 +265,7 @@ class TmMoscowAPI:
         return Competition(
             title=title,
             id=id_value,
-            date=date,
+            event_dates=event_dates,
             location=location,
             views=views,
             updated_at=updated_at,
@@ -295,10 +298,10 @@ class TmMoscowAPI:
                     r"Дистанции\s?пешеходные",
                 ]
             case (
-                DistanceType.SKI,
-                DistanceType.MOUNTAIN,
-                DistanceType.SPELEO,
-                DistanceType.AQUATIC,
+                DistanceType.SKI
+                | DistanceType.MOUNTAIN
+                | DistanceType.SPELEO
+                | DistanceType.AQUATIC
             ):
                 title_suffixes = [rf"Дистанции\s*{distance_type.title.lower()}"]
             case DistanceType.COMBINED_SRW:
@@ -312,9 +315,7 @@ class TmMoscowAPI:
                     "Дистанции\\s*велосипедные",
                 ]
             case DistanceType.AUTO_MOTO:
-                title_suffixes = TmMoscowAPI._get_suffixes_distances_on_vehicles(
-                    "Авто", "авто"
-                )
+                title_suffixes = TmMoscowAPI._get_suffixes_distances_on_vehicles("Авто", "авто")
             case DistanceType.EQUESTRIAN:
                 title_suffixes = TmMoscowAPI._get_suffixes_distances_on_vehicles(
                     r"Конные\s*(дистанции)?", "кони|конные"
@@ -323,8 +324,8 @@ class TmMoscowAPI:
                 title_suffixes = [r"Дистанции\s*парусные", r"Дистанция\s*-?\s*парусная"]
             case DistanceType.NORDIC_WALKING:
                 title_suffixes = [r"Северная\s*ходьба"]
-            case _:
-                raise ValueError
+            case _ as unreachable:
+                typing.assert_never(unreachable)
 
         suffixes_pattern = "|".join([rf"{suffix}\.?" for suffix in title_suffixes])
         title_pattern = rf"\s*({suffixes_pattern})(?=.*)?"
