@@ -15,6 +15,7 @@ class DBUser(Base, TimestampMixin):
     id: Mapped[Int64] = mapped_column(primary_key=True, nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
     locale: Mapped[str] = mapped_column(String(length=2), nullable=False)
+    distance_type_id: Mapped[Int64] = mapped_column(nullable=False, default=2)
 
     def __repr__(self) -> str:
         return f"{self.name} <{self.id}>"
