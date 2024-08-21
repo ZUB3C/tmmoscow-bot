@@ -269,8 +269,8 @@ class TmMoscowAPI:
 
         event_begins_at, event_ends_at = TmMoscowAPI._parse_date_range(metadata_text)
         return Competition(
-            title=title,
             id=id_value,
+            title=title,
             event_dates=event_dates,
             event_begins_at=event_begins_at,
             event_ends_at=event_ends_at,

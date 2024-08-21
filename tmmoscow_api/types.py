@@ -6,8 +6,8 @@ from tmmoscow_api.const import INDEX_URL
 
 @dataclass(frozen=True)
 class Competition:
-    title: str
     id: int
+    title: str
     event_dates: str | None
     event_begins_at: datetime | None
     event_ends_at: datetime | None
@@ -43,6 +43,8 @@ class ContentBlock:
 
 @dataclass(frozen=True)
 class CompetitionInfo(Competition):
-    author: str | None
+    author: str
     content_blocks: list[ContentBlock]
-    created_at: datetime | None
+    created_at: (
+        datetime | None
+    )  # None only if parse_created_at=False, otherwise it always will be parsed
