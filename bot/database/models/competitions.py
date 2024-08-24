@@ -26,7 +26,7 @@ class CompetitionVersions(Base, TimestampMixin):
     __tablename__ = "competition_versions"
 
     competition_id: Mapped[Int64] = mapped_column(ForeignKey("competitions.id"), nullable=False)
-    version: Mapped[Int64] = mapped_column()
+    version: Mapped[Int64] = mapped_column(nullable=False)
 
     __table_args__ = (
         PrimaryKeyConstraint("competition_id", "version", name="pk_competition_version"),

@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, PrimaryKeyConstraint, String, Text
+from sqlalchemy import ForeignKey, PrimaryKeyConstraint, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, Int64, TimestampMixin
@@ -19,7 +19,9 @@ class FilesContentLines(Base, TimestampMixin):
 
     file_id: Mapped[Int64] = mapped_column(ForeignKey("files.id"), nullable=False)
     content_line_id: Mapped[Int64] = mapped_column(ForeignKey("content_lines.id"), nullable=False)
+    position: Mapped[Int64] = mapped_column(nullable=False)
 
     __table_args__ = (
         PrimaryKeyConstraint("file_id", "content_line_id", name="pk_file_content_line"),
+        UniqueConstraint("content_line_id", "position", name="uq_content_line_position"),
     )

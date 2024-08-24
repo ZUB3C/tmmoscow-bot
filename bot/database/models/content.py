@@ -1,7 +1,6 @@
 import enum
 
-from sqlalchemy import BigInteger, Enum, ForeignKey
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import Enum, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, Int64, TimestampMixin
@@ -15,7 +14,14 @@ class ContentBlocks(Base, TimestampMixin):
         ForeignKey("competitions.id"), unique=True, nullable=False
     )
     competition_version_id: Mapped[Int64] = mapped_column(nullable=False)
+    position: Mapped[Int64] = mapped_column(nullable=False)
     title: Mapped[str] = mapped_column(nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "competition_version_id", "position", name="uq_competition_version_position"
+        ),
+    )
 
 
 class ContentLineTypes(enum.Enum):
@@ -30,7 +36,11 @@ class ContentLines(Base, TimestampMixin):
     content_block_id: Mapped[Int64] = mapped_column(
         ForeignKey("content_blocks.id"), unique=True, nullable=False
     )
+    position: Mapped[Int64] = mapped_column(nullable=False)
     html: Mapped[str] = mapped_column(nullable=False)
     comment: Mapped[str] = mapped_column(nullable=True)
-    file_ids: Mapped[ARRAY[BigInteger]] = mapped_column(ARRAY(BigInteger), nullable=True)
     line_type: Mapped[ContentLineTypes] = mapped_column(Enum(ContentLineTypes), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("content_block_id", "position", name="uq_content_block_position"),
+    )
