@@ -12,12 +12,14 @@ from selectolax.parser import HTMLParser, Node
 
 from .const import (
     BASE_URL,
+    CONTENT_LINE_PATTERN,
     DEFAULT_HEADERS,
     EVENT_DATES_PATTERN,
     HTML_ENCODING,
     ID_TO_DISTANCE_TYPE,
     INDEX_PATH,
     MONTH_NAME_TO_NUMBER,
+    VIEWS_PATTERN,
 )
 from .enums import DistanceType, _ParseCompetitionFrom
 from .types import (
@@ -151,9 +153,8 @@ class TmMoscowAPI:
                 # Check if line is a subtitle or content line
                 if typing.TYPE_CHECKING:
                     content_line: ContentLine | ContentSubtitle
-                content_line_pattern = r"\s*-\s.*"
                 body_html = get_body_html(line_parser)
-                if re.match(content_line_pattern, body_html):
+                if CONTENT_LINE_PATTERN.match(body_html):
                     body_html = re.sub(r"^\s*-\s", "", body_html)
                     content_line = ContentLine(html=body_html, comment=comment)
                 else:
@@ -200,12 +201,11 @@ class TmMoscowAPI:
             case _ParseCompetitionFrom.CATEGORY_PAGE:
                 if distance_type is None:
                     raise ValueError("Give category argument of type NewsCategory")
-                title_tag, metadata_tag, views_tag = tr_tags[:3]
+                title_tag, metadata_tag = tr_tags[:2]
                 title = title_tag.text(strip=True)
             case _ParseCompetitionFrom.COMPETITION_PAGE:
-                title_tag = tr_tags[0]
-                metadata_tag = tr_tags[3]
-                views_tag = tr_tags[8]
+                title_tag, metadata_tag = tr_tags[0], tr_tags[3]
+
                 title = title_tag.css_first("td > font").text(strip=True)
 
                 category_url = cast(str, title_tag.css_first("td > a").attributes.get("href", ""))
@@ -259,13 +259,23 @@ class TmMoscowAPI:
         for link_tag in metadata_tag.css("a"):
             link_tag.decompose()
 
-        metadata_parts = metadata_lines[0].split(",", maxsplit=1)
-        if len(metadata_parts) == 2:
-            event_dates, location = map(str.strip, metadata_parts)
-        elif len(metadata_parts) == 1:
-            event_dates, location = metadata_parts[0], metadata_parts[0]
+        if len(metadata_lines) > 0:
+            metadata_parts = metadata_lines[0].split(",", maxsplit=1)
+            if len(metadata_parts) == 2:
+                event_dates, location = map(str.strip, metadata_parts)
+            elif len(metadata_parts) == 1:
+                event_dates, location = metadata_parts[0], metadata_parts[0]
+        else:
+            event_dates, location = None, None
 
-        views = int("".join(re.findall(r"\d", views_tag.text(strip=True)))) if views_tag else None
+        for tr_tag in tr_tags[2:]:
+            text = tr_tag.text(strip=True)
+            match = VIEWS_PATTERN.match(text)
+            if match:
+                views = int(match.group("views"))
+                break
+        else:
+            views = None
 
         event_begins_at, event_ends_at = TmMoscowAPI._parse_date_range(metadata_text)
         return Competition(
@@ -296,14 +306,14 @@ class TmMoscowAPI:
         match distance_type:
             case DistanceType.INDOORS:
                 title_suffixes = [
-                    "Дистанции пешеходные",
-                    "Дистанции пешеходные в закрытых помещения",
+                    r"Дистанции\s*пешеходные\s*в\s*закрытых\s*помещениях",
+                    r"Дистанции\s*пешеходные",
                 ]
             case DistanceType.WALKING:
                 title_suffixes = [
                     r"Дистанции\s*пешеходные",
-                    r"Дистанции\s?-\s?пешеходные",
-                    r"Дистанции\s?пешеходные",
+                    r"Дистанции\s*-\s*пешеходные",
+                    r"Дистанции\s*пешеходные",
                 ]
             case (
                 DistanceType.SKI
@@ -360,12 +370,8 @@ class TmMoscowAPI:
             start_month = end_month
         if not end_month:
             end_month = start_month
-        try:
-            start_month_number = MONTH_NAME_TO_NUMBER[start_month.lower()]
-            end_month_number = MONTH_NAME_TO_NUMBER[end_month.lower()]
-        except KeyError as e:
-            print(f"{start_month=} {end_month=} {match}")
-            raise e
+        start_month_number = MONTH_NAME_TO_NUMBER[start_month.lower()]
+        end_month_number = MONTH_NAME_TO_NUMBER[end_month.lower()]
 
         event_begins_at = datetime(year=year, month=start_month_number, day=start_day)
         event_ends_at = datetime(year=year, month=end_month_number, day=int(end_day))

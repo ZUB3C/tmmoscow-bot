@@ -1,6 +1,6 @@
 from typing import cast
 
-from selectolax.parser import HTMLParser
+from selectolax.parser import HTMLParser, Node
 from yarl import URL
 
 
@@ -13,5 +13,6 @@ def get_body_html(parser: HTMLParser) -> str:
     return cast(str, parser.body.html)[6:-7]  # type: ignore[union-attr]
 
 
-def node_with_text(html: str, strip: bool = True) -> bool:
-    return bool(HTMLParser(html=html).text(strip=strip))
+def node_with_text(html: str | Node, strip: bool = True) -> bool:
+    node: HTMLParser | Node = HTMLParser(html=html) if isinstance(html, str) else html
+    return bool(node.text(strip=strip))

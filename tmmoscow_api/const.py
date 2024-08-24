@@ -41,3 +41,5 @@ MONTH_NAME_TO_NUMBER = {
     "ноября": 11,
     "декабря": 12,
 }
+VIEWS_PATTERN = re.compile(r"Прочита(на|но|ли):\s*(?P<views>\d*)", flags=re.IGNORECASE)
+CONTENT_LINE_PATTERN = re.compile(r"\s*-\s*.*$")
