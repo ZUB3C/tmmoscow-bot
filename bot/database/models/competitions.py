@@ -13,7 +13,7 @@ class Competitions(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(nullable=False)
     event_dates: Mapped[str] = mapped_column(nullable=True)
     location: Mapped[str] = mapped_column(nullable=True)
-    views: Mapped[Int64] = mapped_column(nullable=False)
+    views: Mapped[Int64] = mapped_column(nullable=True)
     logo_url: Mapped[str] = mapped_column(nullable=True)
     author: Mapped[str] = mapped_column(nullable=False)
     event_begins_at: Mapped[datetime] = mapped_column(nullable=True)
