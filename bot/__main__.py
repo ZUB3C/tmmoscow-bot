@@ -7,6 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram_i18n import I18nMiddleware
 from aiogram_i18n.cores import FluentRuntimeCore
 from loguru import logger
+from tmmoscow_api import TmMoscowAPI
 
 from .database import create_pool
 from .enums import Locale
@@ -19,6 +20,10 @@ from .utils.loggers import setup_logger
 async def main() -> None:
     setup_logger()
     settings = Settings()
+    tmmoscow = TmMoscowAPI()
+
+    async def on_shutdown() -> None:
+        await tmmoscow.close()
 
     bot = Bot(
         token=settings.bot_token.get_secret_value(),
@@ -30,6 +35,7 @@ async def main() -> None:
     admin.router.message.filter(F.from_user.id.in_(settings.admin_chat_id))
 
     dp.include_routers(user.router, admin.router)
+    dp.shutdown.register(on_shutdown)
 
     pool = dp["session_pool"] = create_pool(dsn=settings.build_dsn(), enable_logging=False)
     i18n_middleware = dp["i18n_middleware"] = I18nMiddleware(
@@ -50,7 +56,7 @@ async def main() -> None:
         logger.info("Updates skipped successfully")
 
     logger.info("Bot started")
-    await dp.start_polling(bot, settings=settings)
+    await dp.start_polling(bot, settings=settings, tmmoscow=tmmoscow)
 
 
 if __name__ == "__main__":
