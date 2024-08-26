@@ -43,7 +43,7 @@ class ContentBlock:
 
 @dataclass(frozen=True)
 class CompetitionInfo(Competition):
-    author: str
+    author: str | None
     content_blocks: list[ContentBlock]
     created_at: (
         datetime | None

@@ -11,6 +11,7 @@ import aiohttp
 from selectolax.parser import HTMLParser, Node
 
 from .const import (
+    AUTHOR_PATTERN,
     BASE_URL,
     CONTENT_LINE_PATTERN,
     DEFAULT_HEADERS,
@@ -46,7 +47,6 @@ class TmMoscowAPI:
         self, distance_type: DistanceType, *, offset: int = 0
     ) -> list[Competition]:
         """Get data on 30 (or less) latest competitions with offset"""
-
         params = {"go": "News", "in": "cat", "id": distance_type.id, "page": offset}
         html = await self._get(INDEX_PATH, params=params)
         parser = HTMLParser(html)
@@ -169,7 +169,17 @@ class TmMoscowAPI:
                 current_content_lines.append(content_line)
         content_blocks.append(ContentBlock(title=current_title, lines=current_content_lines))
 
-        author = tr_tags[7].css_first("td").text(strip=True, deep=False)
+        try:
+            author = tr_tags[7].css_first("td").text(strip=True, deep=False)
+        except IndexError:
+            for tr_tag in reversed(tr_tags):
+                text = tr_tag.text(strip=True)
+                match = AUTHOR_PATTERN.match(text)
+                if match:
+                    author = match.group("author")
+                    break
+            else:
+                author = None
 
         return CompetitionInfo(
             title=competition.title,
@@ -259,14 +269,13 @@ class TmMoscowAPI:
         for link_tag in metadata_tag.css("a"):
             link_tag.decompose()
 
+        event_dates, location = None, None
         if len(metadata_lines) > 0:
-            metadata_parts = metadata_lines[0].split(",", maxsplit=1)
+            metadata_parts = list(map(str.strip, metadata_lines[0].split(",", maxsplit=1)))
             if len(metadata_parts) == 2:
-                event_dates, location = map(str.strip, metadata_parts)
+                event_dates, location = metadata_parts
             elif len(metadata_parts) == 1:
                 event_dates, location = metadata_parts[0], metadata_parts[0]
-        else:
-            event_dates, location = None, None
 
         for tr_tag in tr_tags[2:]:
             text = tr_tag.text(strip=True)
