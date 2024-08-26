@@ -15,7 +15,7 @@ class Competitions(Base, TimestampMixin):
     location: Mapped[str] = mapped_column(nullable=True)
     views: Mapped[Int64] = mapped_column(nullable=True)
     logo_url: Mapped[str] = mapped_column(nullable=True)
-    author: Mapped[str] = mapped_column(nullable=False)
+    author: Mapped[str] = mapped_column(nullable=True)
     event_begins_at: Mapped[datetime] = mapped_column(nullable=True)
     event_ends_at: Mapped[datetime] = mapped_column(nullable=True)
     competition_created_at: Mapped[datetime] = mapped_column(nullable=False)
