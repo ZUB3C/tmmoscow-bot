@@ -3,7 +3,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram_i18n import L
 from aiogram_i18n.types import InlineKeyboardButton
 from tmmoscow_api.enums import DistanceType
-from tmmoscow_api.types import Competition
+from tmmoscow_api.types import CompetitionSummary
 
 
 def get_distance_types_kb(current_distance_type_id: int) -> InlineKeyboardMarkup:
@@ -23,7 +23,7 @@ def get_distance_types_kb(current_distance_type_id: int) -> InlineKeyboardMarkup
     return builder.as_markup()
 
 
-def get_competitions_kb(competitions: list[Competition]) -> InlineKeyboardMarkup:
+def get_competitions_kb(competitions: list[CompetitionSummary]) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
         *[

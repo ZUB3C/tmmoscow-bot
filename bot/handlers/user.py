@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram_i18n import I18nContext
 from tmmoscow_api import TmMoscowAPI
-from tmmoscow_api.types import Competition
+from tmmoscow_api.types import CompetitionSummary
 
 from ..const import MAX_COMPETITIONS_LIST_LEN
 from ..database import DBUser, UoW
@@ -27,7 +27,7 @@ async def cmd_start(message: Message, state: FSMContext, i18n: I18nContext, user
 async def get_competitions(
     tmmoscow: TmMoscowAPI,
     user: DBUser,
-) -> list[Competition]:
+) -> list[CompetitionSummary]:
     user_distance_type = get_distance_type(user.distance_type_id)
     competitions = await tmmoscow.get_recent_competitions(distance_type=user_distance_type)
     if len(competitions) > MAX_COMPETITIONS_LIST_LEN:

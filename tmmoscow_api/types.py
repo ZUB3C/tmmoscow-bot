@@ -5,7 +5,7 @@ from tmmoscow_api.const import INDEX_URL
 
 
 @dataclass(frozen=True)
-class Competition:
+class CompetitionSummary:
     id: int
     title: str
     event_dates: str | None
@@ -42,7 +42,7 @@ class ContentBlock:
 
 
 @dataclass(frozen=True)
-class CompetitionInfo(Competition):
+class CompetitionDetail(CompetitionSummary):
     author: str | None
     content_blocks: list[ContentBlock]
     created_at: (

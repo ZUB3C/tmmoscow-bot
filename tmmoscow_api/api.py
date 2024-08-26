@@ -24,8 +24,8 @@ from .const import (
 )
 from .enums import DistanceType, _ParseCompetitionFrom
 from .types import (
-    Competition,
-    CompetitionInfo,
+    CompetitionDetail,
+    CompetitionSummary,
     ContentBlock,
     ContentLine,
     ContentSubtitle,
@@ -45,7 +45,7 @@ class TmMoscowAPI:
 
     async def get_recent_competitions(
         self, distance_type: DistanceType, *, offset: int = 0
-    ) -> list[Competition]:
+    ) -> list[CompetitionSummary]:
         """Get data on 30 (or less) latest competitions with offset"""
         params = {"go": "News", "in": "cat", "id": distance_type.id, "page": offset}
         html = await self._get(INDEX_PATH, params=params)
@@ -56,7 +56,7 @@ class TmMoscowAPI:
         )
         if news_tag is None:
             return []  # offset is too big
-        competitions: list[Competition] = []
+        competitions: list[CompetitionSummary] = []
         tr_tags = news_tag.css("tr")
         for i in range(0, len(tr_tags), 5):
             tags_chunk = tr_tags[i : i + 5]
@@ -70,7 +70,7 @@ class TmMoscowAPI:
 
     async def get_competition_data(
         self, id: int, parse_created_at: bool = False
-    ) -> CompetitionInfo:
+    ) -> CompetitionDetail:
         """Get detailed information about competition"""
         params = {"go": "News", "in": "view", "id": id}
         if not parse_created_at:
@@ -181,7 +181,7 @@ class TmMoscowAPI:
             else:
                 author = None
 
-        return CompetitionInfo(
+        return CompetitionDetail(
             title=competition.title,
             id=competition.id,
             event_dates=competition.event_dates,
@@ -204,7 +204,7 @@ class TmMoscowAPI:
         clear_title: bool = True,
         *,
         competition_id: int | None = None,
-    ) -> Competition:
+    ) -> CompetitionSummary:
         if not (len(tr_tags) >= 3 and all(len(tag.css("tr")) == 1 for tag in tr_tags)):
             raise ValueError("All tags should be <tr>")
         match parse_competition_from:
@@ -287,7 +287,7 @@ class TmMoscowAPI:
             views = None
 
         event_begins_at, event_ends_at = TmMoscowAPI._parse_date_range(metadata_text)
-        return Competition(
+        return CompetitionSummary(
             id=id_value,
             title=title,
             event_dates=event_dates,
