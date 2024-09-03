@@ -13,6 +13,16 @@ def get_body_html(parser: HTMLParser) -> str:
     return cast(str, parser.body.html)[6:-7]  # type: ignore[union-attr]
 
 
-def node_with_text(html: str | Node, strip: bool = True) -> bool:
-    node: HTMLParser | Node = HTMLParser(html=html) if isinstance(html, str) else html
-    return bool(node.text(strip=strip))
+def get_html_text(html: str, strip: bool = True) -> str:
+    return HTMLParser(html=html).text(strip=strip)
+
+
+def node_with_text(
+    html: str | None = None, node: Node | HTMLParser | None = None, strip: bool = True
+) -> bool:
+    if (html is None) and (node is None):
+        raise ValueError("Either html or node must be provided")
+    if html:
+        node = HTMLParser(html=html)
+
+    return bool(node.text(strip=strip)) if node else False

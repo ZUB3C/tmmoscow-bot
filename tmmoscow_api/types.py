@@ -22,17 +22,14 @@ class CompetitionSummary:
 
 
 @dataclass(frozen=True)
-class _BaseLine:
+class ContentLine:
     html: str
     comment: str | None
 
 
 @dataclass(frozen=True)
-class ContentLine(_BaseLine): ...
-
-
-@dataclass(frozen=True)
-class ContentSubtitle(_BaseLine): ...
+class ContentSubtitle:
+    html: str
 
 
 @dataclass(frozen=True)
