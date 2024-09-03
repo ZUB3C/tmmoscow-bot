@@ -39,3 +39,11 @@ class NewsCategory(_BaseCategory):
 class _ParseCompetitionFrom(Enum):
     CATEGORY_PAGE = auto()
     COMPETITION_PAGE = auto()
+
+
+class ParsedContentLineType(Enum):
+    TITLE = auto()
+    SUBTITLE = auto()
+    FULL_LINE_OR_LINE_BEGINNING = auto()
+    LINE_CONTINUATION_OR_TEXT = auto()
+    TITLE_UNDERLINE = auto()  # "=====..." line

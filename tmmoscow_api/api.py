@@ -1,10 +1,12 @@
 import asyncio
+import contextlib
 import logging
 import re
 import typing
+from collections.abc import Sequence
 from datetime import datetime
 from types import TracebackType
-from typing import Any, Final, cast
+from typing import Any, Final, Literal, cast
 from urllib.parse import urljoin
 
 import aiohttp
@@ -15,6 +17,7 @@ from .const import (
     BASE_URL,
     CONTENT_LINE_PATTERN,
     DEFAULT_HEADERS,
+    EVENT_DATES_LOCATION_NODE_PATTERN,
     EVENT_DATES_PATTERN,
     HTML_ENCODING,
     ID_TO_DISTANCE_TYPE,
@@ -22,7 +25,7 @@ from .const import (
     MONTH_NAME_TO_NUMBER,
     VIEWS_PATTERN,
 )
-from .enums import DistanceType, _ParseCompetitionFrom
+from .enums import DistanceType, ParsedContentLineType, _ParseCompetitionFrom
 from .types import (
     CompetitionDetail,
     CompetitionSummary,
@@ -30,7 +33,7 @@ from .types import (
     ContentLine,
     ContentSubtitle,
 )
-from .utils import get_body_html, get_url_parameter_value, node_with_text
+from .utils import get_body_html, get_html_text, get_url_parameter_value, node_with_text
 
 logger: Final[logging.Logger] = logging.getLogger(name=__name__)
 
@@ -51,17 +54,17 @@ class TmMoscowAPI:
         html = await self._get(INDEX_PATH, params=params)
         parser = HTMLParser(html)
 
-        news_tag = parser.css_first(
+        news_node = parser.css_first(
             "body > table:nth-child(4) > tbody > tr > td:nth-child(3) > table:nth-child(8) > tbody"
         )
-        if news_tag is None:
+        if news_node is None:
             return []  # offset is too big
         competitions: list[CompetitionSummary] = []
-        tr_tags = news_tag.css("tr")
-        for i in range(0, len(tr_tags), 5):
-            tags_chunk = tr_tags[i : i + 5]
-            competition = self._parse_competition(
-                tr_tags=tags_chunk,
+        tr_nodes = news_node.css("tr")
+        for i in range(0, len(tr_nodes), 5):
+            nodes_chunk = tr_nodes[i : i + 5]
+            competition = self._parse_competition_summary(
+                tr_nodes=nodes_chunk,
                 distance_type=distance_type,
                 parse_competition_from=_ParseCompetitionFrom.CATEGORY_PAGE,
             )
@@ -84,95 +87,34 @@ class TmMoscowAPI:
             )
             parser_created_at = HTMLParser(created_at_html)
             _, created_at_str = (
-                parser_created_at.css_first("body > div > b").text(strip=True).split(" | ", 1)
+                parser_created_at.css_first("body > div > b")
+                .text(strip=True)
+                .split(" | ", maxsplit=1)
             )
             created_at = datetime.strptime(created_at_str, "%d.%m.%Y %H:%M")
         parser = HTMLParser(html)
 
-        data_tag = parser.css_first(
+        content_node = parser.css_first(
             "body > table:nth-child(4) > tbody > tr > td:nth-child(3) > table:nth-child(7) > tbody"
         )
-        tr_tags = data_tag.css("tr")
-        competition = self._parse_competition(
-            tr_tags=tr_tags[:9],
+        tr_nodes = content_node.css("tr")
+        competition_summary = self._parse_competition_summary(
+            content_node=content_node,
             parse_competition_from=_ParseCompetitionFrom.COMPETITION_PAGE,
             competition_id=id,
         )
-
-        content_tag = tr_tags[5].css_first("td")
-        content_blocks: list[ContentBlock] = []
-
-        content_lines = list(
-            map(
-                str.strip,
-                filter(
-                    node_with_text,
-                    cast(str, content_tag.html).split("<br>"),
-                ),
-            )
-        )
-
-        current_title = ""
-        current_content_lines: list[ContentLine | ContentSubtitle] = []
-        for line_html in content_lines:
-            line_parser = HTMLParser(line_html)
-
-            title_tag = line_parser.css_first("b > font")
-            if (
-                title_tag
-                and title_tag.text(strip=True)
-                and title_tag.attributes.get("color") == "green"
-            ):
-                if set(line_parser.text(strip=True)) == {"="}:
-                    continue
-                text = title_tag.text(strip=True)
-                if all(char.isupper() for char in text if char.isalpha()):
-                    if current_title:
-                        content_blocks.append(
-                            ContentBlock(title=current_title, lines=current_content_lines)
-                        )
-                        current_content_lines = []
-                    current_title = text
-            else:
-                comment_tag = line_parser.css_first("font")
-                if comment_tag:
-                    if comment_tag.text(strip=True) != "":
-                        comment = comment_tag.text(strip=True)
-                    else:
-                        comment = None
-                    comment_tag.decompose()
-                else:
-                    comment = None
-                # Remove all attributes except href
-                for node in line_parser.tags("a"):
-                    for attr in node.attributes:
-                        if attr != "href":
-                            del node.attrs[attr]  # type: ignore[attr-defined]
-                        else:
-                            node.attrs["href"] = urljoin(BASE_URL, node.attributes["href"])  # type: ignore[index]
-                # Check if line is a subtitle or content line
-                if typing.TYPE_CHECKING:
-                    content_line: ContentLine | ContentSubtitle
-                body_html = get_body_html(line_parser)
-                if CONTENT_LINE_PATTERN.match(body_html):
-                    body_html = re.sub(r"^\s*-\s", "", body_html)
-                    content_line = ContentLine(html=body_html, comment=comment)
-                else:
-                    subtitle_tag = line_parser.css_first("b")
-                    if subtitle_tag and subtitle_tag.text(strip=True):
-                        content_line = ContentSubtitle(
-                            html=line_parser.body.child.child.html,  # type: ignore[union-attr,arg-type]
-                            comment=comment,
-                        )
-                    else:
-                        content_line = ContentLine(html=body_html, comment=comment)
-                current_content_lines.append(content_line)
-        content_blocks.append(ContentBlock(title=current_title, lines=current_content_lines))
+        content_blocks = []
+        for node in tr_nodes[5:]:
+            content_node = node.css_first("td")
+            content_blocks = TmMoscowAPI._parse_content(content_html=cast(str, content_node.html))
+            if content_blocks:
+                break
 
         try:
-            author = tr_tags[7].css_first("td").text(strip=True, deep=False)
+            author = tr_nodes[7].css_first("td").text(strip=True, deep=False)
         except IndexError:
-            for tr_tag in reversed(tr_tags):
+            # Legacy article formatting support
+            for tr_tag in reversed(tr_nodes):
                 text = tr_tag.text(strip=True)
                 match = AUTHOR_PATTERN.match(text)
                 if match:
@@ -182,43 +124,70 @@ class TmMoscowAPI:
                 author = None
 
         return CompetitionDetail(
-            title=competition.title,
-            id=competition.id,
-            event_dates=competition.event_dates,
-            event_begins_at=competition.event_begins_at,
-            event_ends_at=competition.event_ends_at,
-            location=competition.location,
-            views=competition.views,
-            updated_at=competition.updated_at,
-            logo_url=competition.logo_url,
+            title=competition_summary.title,
+            id=competition_summary.id,
+            event_dates=competition_summary.event_dates,
+            event_begins_at=competition_summary.event_begins_at,
+            event_ends_at=competition_summary.event_ends_at,
+            location=competition_summary.location,
+            views=competition_summary.views,
+            updated_at=competition_summary.updated_at,
+            logo_url=competition_summary.logo_url,
             author=author,
             content_blocks=content_blocks,
             created_at=created_at,
         )
 
+    @overload
     @staticmethod
-    def _parse_competition(
-        tr_tags: list[Node],
+    def _parse_competition_summary(
+        parse_competition_from: Literal[_ParseCompetitionFrom.CATEGORY_PAGE],
+        distance_type: DistanceType,
+        content_node: Node | None = None,
+        tr_nodes: Sequence[Node] | None = None,
+        clear_title: bool = True,
+        *,
+        competition_id: None = None,
+    ) -> CompetitionSummary: ...
+
+    @overload
+    @staticmethod
+    def _parse_competition_summary(
+        parse_competition_from: Literal[_ParseCompetitionFrom.COMPETITION_PAGE],
+        distance_type: None = None,
+        content_node: Node | None = None,
+        tr_nodes: Sequence[Node] | None = None,
+        clear_title: bool = True,
+        *,
+        competition_id: int,
+    ) -> CompetitionSummary: ...
+
+    @staticmethod
+    def _parse_competition_summary(
         parse_competition_from: _ParseCompetitionFrom,
+        content_node: Node | None = None,
+        tr_nodes: Sequence[Node] | None = None,
         distance_type: DistanceType | None = None,
         clear_title: bool = True,
         *,
         competition_id: int | None = None,
     ) -> CompetitionSummary:
-        if not (len(tr_tags) >= 3 and all(len(tag.css("tr")) == 1 for tag in tr_tags)):
-            raise ValueError("All tags should be <tr>")
+        if content_node is None and tr_nodes is None:
+            raise ValueError
+        if content_node:
+            tr_nodes: list[Node] = content_node.css("tr")
         match parse_competition_from:
             case _ParseCompetitionFrom.CATEGORY_PAGE:
                 if distance_type is None:
                     raise ValueError("Give category argument of type NewsCategory")
-                title_tag, metadata_tag = tr_tags[:2]
-                title = title_tag.text(strip=True)
+                title_node, metadata_node = tr_nodes[:2]
+                title = title_node.text(strip=True)
             case _ParseCompetitionFrom.COMPETITION_PAGE:
-                title_tag, metadata_tag = tr_tags[0], tr_tags[3]
+                title_node, metadata_node = tr_nodes[0], tr_nodes[3]
 
-                title = title_tag.css_first("td > font").text(strip=True)
+                title = title_node.css_first("td > font").text(strip=True)
 
-                category_url = cast(str, title_tag.css_first("td > a").attributes.get("href", ""))
+                category_url = cast(str, title_node.css_first("td > a").attributes.get("href", ""))
                 category_id = int(get_url_parameter_value(url=category_url, parameter="id"))
                 distance_type = ID_TO_DISTANCE_TYPE.get(category_id)
                 if distance_type is None:
@@ -230,29 +199,26 @@ class TmMoscowAPI:
         else:
             title = title.removesuffix(".")
 
-        metadata_text = metadata_tag.text(strip=True, separator="\n")
+        metadata_text = metadata_node.text(strip=True, separator="\n")
+
         metadata_lines: list[str] = list(
             filter(lambda html: node_with_text(html=html), metadata_text.split("\n"))
         )
-        if len(metadata_lines) < 2:
-            updated_at = None
-        else:
+        updated_at = None
+        if len(metadata_lines) >= 2:
             updated_at_str = metadata_lines[1]
             updated_at_parser = HTMLParser(html=updated_at_str)
-            if updated_at_parser.css_first("b"):
-                updated_at_str = updated_at_parser.css_first("b").text(strip=True).lower()
-            try:
-                updated_at = datetime.strptime(updated_at_str, "обновлено %d.%m.%Y")
-            except ValueError:
-                try:
-                    updated_at = datetime.strptime(updated_at_str, "обновлено: %d.%m.%Y")
-                except ValueError:
-                    updated_at = None
+            updated_at_node = updated_at_parser.css_first("b")
+            if updated_at_node:
+                updated_at_str = updated_at_node.text(strip=True).lower()
+            for updated_at_format in "обновлено %d.%m.%Y", "обновлено: %d.%m.%Y":
+                with contextlib.suppress(ValueError):
+                    updated_at = datetime.strptime(updated_at_str, updated_at_format)
 
         match parse_competition_from:
             case _ParseCompetitionFrom.CATEGORY_PAGE:
                 competition_url = cast(
-                    str, title_tag.css_first("td > a").attributes.get("href", "")
+                    str, title_node.css_first("td > a").attributes.get("href", "")
                 )
                 id_value = int(get_url_parameter_value(url=competition_url, parameter="id"))
             case _ParseCompetitionFrom.COMPETITION_PAGE:
@@ -262,23 +228,40 @@ class TmMoscowAPI:
             case _ as unreachable:
                 typing.assert_never(unreachable)
 
-        logo_url_tag = metadata_tag.css_first("a > img")
-        logo_url = logo_url_tag.attributes.get("src") if logo_url_tag else None
+        logo_url_node = metadata_node.css_first("a > img")
+        logo_url = logo_url_node.attributes.get("src") if logo_url_node else None
         if logo_url and BASE_URL not in logo_url:
             logo_url = urljoin(BASE_URL, logo_url)
-        for link_tag in metadata_tag.css("a"):
-            link_tag.decompose()
+        for link_node in metadata_node.css("a"):
+            link_node.decompose()
 
         event_dates, location = None, None
-        if len(metadata_lines) > 0:
-            metadata_parts = list(map(str.strip, metadata_lines[0].split(",", maxsplit=1)))
-            if len(metadata_parts) == 2:
-                event_dates, location = metadata_parts
-            elif len(metadata_parts) == 1:
-                event_dates, location = metadata_parts[0], metadata_parts[0]
+        event_begins_at, event_ends_at = None, None
+        for i, node in enumerate(tr_nodes):
+            logger.debug(f"{node.html=}")
+            match = re.search(EVENT_DATES_LOCATION_NODE_PATTERN, node.html)
+            if match:
+                logger.debug(f"FIND SEARCH: {match}")
+                new_node_html = re.sub(EVENT_DATES_LOCATION_NODE_PATTERN, "", node.html)
+                # new_node = HTMLParser(html=f"<div>{new_node_html}</div>").css_first("div")
+                new_node = HTMLParser(
+                    html=f"<table><tbody><tr><td>{new_node_html}</td></tr><table><tbody>"
+                )
+                logger.debug(f"{new_node_html=}")
+                tr_nodes[i] = cast(Node, new_node)
+                logger.debug(f"{new_node.html=}")
+                event_dates_location_str = match.group("event_dates_location_str")
+                logger.debug(f"{event_dates_location_str=}")
+                event_dates, location = list(
+                    map(str.strip, event_dates_location_str.split(",", maxsplit=1))
+                )
+                event_begins_at, event_ends_at = TmMoscowAPI._parse_date_range(
+                    event_dates_location_str
+                )
+                break
 
-        for tr_tag in tr_tags[2:]:
-            text = tr_tag.text(strip=True)
+        for node in tr_nodes[2:]:
+            text = node.text(strip=True)
             match = VIEWS_PATTERN.match(text)
             if match:
                 views = int(match.group("views"))
@@ -286,7 +269,6 @@ class TmMoscowAPI:
         else:
             views = None
 
-        event_begins_at, event_ends_at = TmMoscowAPI._parse_date_range(metadata_text)
         return CompetitionSummary(
             id=id_value,
             title=title,
@@ -298,6 +280,111 @@ class TmMoscowAPI:
             updated_at=updated_at,
             logo_url=logo_url,
         )
+
+    @staticmethod
+    def _parse_content(content_html: str) -> list[ContentBlock]:
+        content_lines_html: list[str] = list(
+            map(
+                str.strip,
+                filter(
+                    lambda html: node_with_text(html=html),
+                    content_html.replace("\n", "<br>").split("<br>"),
+                ),
+            )
+        )
+        if not content_lines_html:
+            return []
+        parsed_content_line_types = [TmMoscowAPI._detect_line_type(i) for i in content_lines_html]
+        content_lines_data: list[ContentBlock] = []
+
+        current_title = ""
+        current_lines: list[ContentLine | ContentSubtitle] = []
+
+        for i, parsed_content_line_type in enumerate(parsed_content_line_types):
+            current_type = parsed_content_line_type
+            next_type = (
+                parsed_content_line_types[i + 1]
+                if i < len(parsed_content_line_types) - 1
+                else None
+            )
+
+            current_parser = HTMLParser(html=content_lines_html[i])
+            # Remove all attributes except href
+            for node in current_parser.tags("a"):
+                for attr in node.attributes:
+                    if attr != "href":
+                        del node.attrs[attr]  # type: ignore[attr-defined]
+                    else:
+                        node.attrs["href"] = urljoin(BASE_URL, node.attributes["href"])
+            current_html = get_body_html(current_parser)
+
+            match current_type:
+                case ParsedContentLineType.TITLE:
+                    if current_title or current_lines:
+                        content_lines_data.append(
+                            ContentBlock(title=current_title, lines=current_lines)
+                        )
+                        current_lines = []
+
+                    current_title = get_html_text(current_html)
+
+                case ParsedContentLineType.SUBTITLE:
+                    current_lines.append(ContentSubtitle(html=current_html))
+
+                case ParsedContentLineType.FULL_LINE_OR_LINE_BEGINNING:
+                    line_parser = HTMLParser(html=current_html)
+                    comment_node = line_parser.css_first("font")
+                    if comment_node:
+                        if comment_node.text(strip=True) != "":
+                            comment = comment_node.text(strip=True)
+                        else:
+                            comment = None
+                        comment_node.decompose()
+                    else:
+                        comment = None
+
+                    combined_html = get_body_html(line_parser)
+                    # Combining all subsequent lines of type LINE_CONTINUATION_OR_TEXT
+                    while next_type is ParsedContentLineType.LINE_CONTINUATION_OR_TEXT:
+                        i += 1
+                        combined_html += "\n" + content_lines_html[i]
+                        next_type = (
+                            parsed_content_line_types[i + 1]
+                            if i < len(parsed_content_line_types) - 1
+                            else None
+                        )
+
+                    current_lines.append(ContentLine(html=combined_html, comment=comment))
+
+                case (
+                    ParsedContentLineType.LINE_CONTINUATION_OR_TEXT
+                    | ParsedContentLineType.TITLE_UNDERLINE
+                ):
+                    continue
+                case _ as unreachable:
+                    typing.assert_never(unreachable)
+
+        if current_title or current_lines:
+            content_lines_data.append(ContentBlock(title=current_title, lines=current_lines))
+
+        return content_lines_data
+
+    @staticmethod
+    def _detect_line_type(line_html: str) -> ParsedContentLineType:
+        parser = HTMLParser(html=line_html)
+        text = parser.text(strip=True)
+        if parser.css_first("b > font"):
+            if set(text) == {"="}:
+                return ParsedContentLineType.TITLE_UNDERLINE
+            if all(i.isupper() for i in text if i.islower()):
+                return ParsedContentLineType.TITLE
+        if parser.css_first("b"):
+            if not CONTENT_LINE_PATTERN.match(text) and "href" not in text:
+                return ParsedContentLineType.SUBTITLE
+            return ParsedContentLineType.FULL_LINE_OR_LINE_BEGINNING
+        if CONTENT_LINE_PATTERN.match(text):
+            return ParsedContentLineType.FULL_LINE_OR_LINE_BEGINNING
+        return ParsedContentLineType.LINE_CONTINUATION_OR_TEXT
 
     @staticmethod
     def _get_suffixes_distances_on_vehicles(word: str, in_parentheses: str) -> list[str]:
@@ -364,7 +451,7 @@ class TmMoscowAPI:
         ).removesuffix(".")
 
     @staticmethod
-    def _parse_date_range(event_dates: str) -> tuple[datetime | None, datetime | None]:
+    def _parse_date_range(event_dates: str) -> tuple[datetime, datetime] | tuple[None, None]:
         match = EVENT_DATES_PATTERN.search(event_dates)
         if not match:
             return None, None

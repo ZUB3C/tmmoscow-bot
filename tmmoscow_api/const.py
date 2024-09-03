@@ -27,6 +27,12 @@ EVENT_DATES_REGEX = (
     r"(?:г?)(?:\.?)(?:од)?(?:а?)"
 )
 EVENT_DATES_PATTERN = re.compile(EVENT_DATES_REGEX, flags=re.IGNORECASE)
+EVENT_DATES_LOCATION_NODE_REGEX = (
+    rf"(?:\<br\>)?\s*(?P<event_dates_location_str>{EVENT_DATES_REGEX}.*?)(?=\<br\>)"
+)
+EVENT_DATES_LOCATION_NODE_PATTERN = re.compile(
+    EVENT_DATES_LOCATION_NODE_REGEX, flags=re.IGNORECASE
+)
 MONTH_NAME_TO_NUMBER = {
     "января": 1,
     "февраля": 2,
