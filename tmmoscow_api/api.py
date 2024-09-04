@@ -5,7 +5,7 @@ import re
 import typing
 from datetime import datetime
 from types import TracebackType
-from typing import Any, Final, cast
+from typing import Any, Final, Literal, cast, overload
 from urllib.parse import urljoin
 
 import aiohttp
@@ -136,6 +136,27 @@ class TmMoscowAPI:
             created_at=created_at,
         )
 
+    @overload
+    @staticmethod
+    def _parse_competition_summary(
+        tr_nodes: list[Node],
+        parse_competition_from: Literal[_ParseCompetitionFrom.CATEGORY_PAGE],
+        distance_type: DistanceType,
+        clear_title: bool = True,
+        *,
+        competition_id: None = None,
+    ) -> CompetitionSummary: ...
+
+    @overload
+    @staticmethod
+    def _parse_competition_summary(
+        tr_nodes: list[Node],
+        parse_competition_from: Literal[_ParseCompetitionFrom.COMPETITION_PAGE],
+        distance_type: None = None,
+        clear_title: bool = True,
+        *,
+        competition_id: int,
+    ) -> CompetitionSummary: ...
     @staticmethod
     def _parse_competition_summary(
         tr_nodes: list[Node],
@@ -247,9 +268,6 @@ class TmMoscowAPI:
                 ),
             )
         )
-        content_lines_html: list[str] = list(
-            filter(lambda html: node_with_text(html=html), content_lines_html)
-        )
         if not content_lines_html:
             return []
         parsed_content_line_types = [TmMoscowAPI._detect_line_type(i) for i in content_lines_html]
@@ -311,6 +329,8 @@ class TmMoscowAPI:
                     | ParsedContentLineType.TITLE_UNDERLINE
                 ):
                     continue
+                case _ as unreachable:
+                    typing.assert_never(unreachable)
 
         if current_title or current_lines:
             content_lines_data.append(ContentBlock(title=current_title, lines=current_lines))
@@ -399,7 +419,7 @@ class TmMoscowAPI:
         ).removesuffix(".")
 
     @staticmethod
-    def _parse_date_range(event_dates: str) -> tuple[datetime | None, datetime | None]:
+    def _parse_date_range(event_dates: str) -> tuple[datetime, datetime] | tuple[None, None]:
         match = EVENT_DATES_PATTERN.search(event_dates)
         if not match:
             return None, None
