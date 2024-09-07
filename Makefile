@@ -2,8 +2,11 @@
 
 PROJECT_DIR := .
 
+typing:
+	@rye run basedpyright tmmoscow_api
+
 migration:
-	poetry run alembic revision \
+	rye run alembic revision \
 	  --autogenerate \
 	  --rev-id $(shell python migrations/_get_next_revision_id.py) \
 	  --message "$(message)"

@@ -46,8 +46,9 @@ dependencies = [
 [tool.rye]
 managed = true
 universal = true
+virtual = true
 dev-dependencies = [
-    "mypy>=1.11.2",
+    "basedpyright>=1.17.1",
 ]
 
 [tool.hatch.metadata]
@@ -85,7 +86,6 @@ select = [
     "SIM", # flake8-simplify
     "RET", # flake8-return
     "YTT", # flake8-2020
-    #    "DTZ", # flake8-datetimez
     "RUF", # ruff-specific rules
     "TCH", # flake8-type-checking
     "PTH", # flake8-use-pathlib
@@ -101,12 +101,7 @@ ignore = [
 [tool.ruff.lint.isort]
 known-third-party = ["tmmoscow_api"]
 
-[tool.mypy]
-strict = true
-plugins = [
-    "sqlalchemy.ext.mypy.plugin",
-    "pydantic.mypy"
-]
+[tool.basedpyright]
 exclude = [
     ".git",
     ".venv",
@@ -117,8 +112,8 @@ exclude = [
     "dist",
     "scripts",
 ]
-
-[[tool.mypy.overrides]]
-module = ["bot.handlers.*"]
-strict_optional = false
-warn_return_any = false
+typeCheckingMode = "standard"
+pythonPlatform = "All"
+pythonVersion = "3.12"
+reportMissingImports = true
+reportMissingTypeStubs = true

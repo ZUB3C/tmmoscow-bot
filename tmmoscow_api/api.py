@@ -3,10 +3,9 @@ import contextlib
 import logging
 import re
 import typing
-from collections.abc import Sequence
 from datetime import datetime
 from types import TracebackType
-from typing import Any, Final, Literal, cast
+from typing import Any, Final, Literal, cast, overload
 from urllib.parse import urljoin
 
 import aiohttp
@@ -138,25 +137,25 @@ class TmMoscowAPI:
             created_at=created_at,
         )
 
-    @overload
     @staticmethod
+    @overload
     def _parse_competition_summary(
         parse_competition_from: Literal[_ParseCompetitionFrom.CATEGORY_PAGE],
-        distance_type: DistanceType,
+        distance_type: DistanceType | None = None,
         content_node: Node | None = None,
-        tr_nodes: Sequence[Node] | None = None,
+        tr_nodes: list[Node] | None = None,
         clear_title: bool = True,
         *,
         competition_id: None = None,
     ) -> CompetitionSummary: ...
 
-    @overload
     @staticmethod
+    @overload
     def _parse_competition_summary(
         parse_competition_from: Literal[_ParseCompetitionFrom.COMPETITION_PAGE],
         distance_type: None = None,
         content_node: Node | None = None,
-        tr_nodes: Sequence[Node] | None = None,
+        tr_nodes: list[Node] | None = None,
         clear_title: bool = True,
         *,
         competition_id: int,
@@ -165,17 +164,19 @@ class TmMoscowAPI:
     @staticmethod
     def _parse_competition_summary(
         parse_competition_from: _ParseCompetitionFrom,
-        content_node: Node | None = None,
-        tr_nodes: Sequence[Node] | None = None,
         distance_type: DistanceType | None = None,
+        content_node: Node | None = None,
+        tr_nodes: list[Node] | None = None,
         clear_title: bool = True,
         *,
         competition_id: int | None = None,
     ) -> CompetitionSummary:
-        if content_node is None and tr_nodes is None:
+        if tr_nodes is None and content_node is None:
             raise ValueError
-        if content_node:
-            tr_nodes: list[Node] = content_node.css("tr")
+        if tr_nodes is None:
+            if content_node is None:
+                raise ValueError
+            tr_nodes = content_node.css("tr")
         match parse_competition_from:
             case _ParseCompetitionFrom.CATEGORY_PAGE:
                 if distance_type is None:
@@ -239,10 +240,10 @@ class TmMoscowAPI:
         event_begins_at, event_ends_at = None, None
         for i, node in enumerate(tr_nodes):
             logger.debug(f"{node.html=}")
-            match = re.search(EVENT_DATES_LOCATION_NODE_PATTERN, node.html)
+            match = re.search(EVENT_DATES_LOCATION_NODE_PATTERN, cast(str, node.html))
             if match:
                 logger.debug(f"FIND SEARCH: {match}")
-                new_node_html = re.sub(EVENT_DATES_LOCATION_NODE_PATTERN, "", node.html)
+                new_node_html = re.sub(EVENT_DATES_LOCATION_NODE_PATTERN, "", cast(str, node.html))
                 # new_node = HTMLParser(html=f"<div>{new_node_html}</div>").css_first("div")
                 new_node = HTMLParser(
                     html=f"<table><tbody><tr><td>{new_node_html}</td></tr><table><tbody>"
@@ -315,7 +316,7 @@ class TmMoscowAPI:
                     if attr != "href":
                         del node.attrs[attr]  # type: ignore[attr-defined]
                     else:
-                        node.attrs["href"] = urljoin(BASE_URL, node.attributes["href"])
+                        node.attrs["href"] = urljoin(BASE_URL, node.attributes["href"])  # pyright: ignore[reportIndexIssue]
             current_html = get_body_html(current_parser)
 
             match current_type:
