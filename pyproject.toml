@@ -41,15 +41,16 @@ dependencies = [
     "pydantic-settings>=2.1.0",
     "yarl>=1.9.4",
     "loguru>=0.7.2",
+    "ruff>=0.7.1",
 ]
 
-[tool.rye]
-managed = true
-universal = true
-virtual = true
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "basedpyright>=1.17.1",
 ]
+
+[tool.uv]
+package = false
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -96,6 +97,8 @@ ignore = [
     "PD901", # Avoid using the generic variable name df for DataFrames
     "RUF003", # Ambiguous unicode character comment
     "RUF001", # String contains ambiguous `В` (CYRILLIC CAPITAL LETTER VE)
+    "G004",
+    "E501"
 ]
 
 [tool.ruff.lint.isort]
