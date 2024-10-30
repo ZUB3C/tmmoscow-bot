@@ -1,23 +1,29 @@
 import asyncio
 import contextlib
+import hashlib
 import logging
 import re
 import typing
+from collections.abc import Generator
 from datetime import datetime
+from pathlib import Path
 from types import TracebackType
 from typing import Any, Final, Literal, cast, overload
 from urllib.parse import urljoin
 
 import aiohttp
 from selectolax.parser import HTMLParser, Node
+from yarl import URL
 
 from .const import (
     AUTHOR_PATTERN,
     BASE_URL,
+    CONTENT_LINE_DASH_PATTERN,
     CONTENT_LINE_PATTERN,
     DEFAULT_HEADERS,
     EVENT_DATES_LOCATION_NODE_PATTERN,
     EVENT_DATES_PATTERN,
+    HOST,
     HTML_ENCODING,
     ID_TO_DISTANCE_TYPE,
     INDEX_PATH,
@@ -27,10 +33,12 @@ from .const import (
 from .enums import DistanceType, ParsedContentLineType, _ParseCompetitionFrom
 from .types import (
     CompetitionDetail,
+    CompetitionDetailFiles,
     CompetitionSummary,
     ContentBlock,
     ContentLine,
     ContentSubtitle,
+    File,
 )
 from .utils import get_body_html, get_html_text, get_url_parameter_value, node_with_text
 
@@ -70,9 +78,19 @@ class TmMoscowAPI:
             competitions.append(competition)
         return competitions
 
+    @overload
     async def get_competition_data(
-        self, id: int, parse_created_at: bool = False
-    ) -> CompetitionDetail:
+        self, id: int, *, parse_created_at: bool = False, with_files: Literal[False] = False
+    ) -> CompetitionDetail: ...
+
+    @overload
+    async def get_competition_data(
+        self, id: int, *, parse_created_at: bool = False, with_files: Literal[True] = False
+    ) -> CompetitionDetailFiles: ...
+
+    async def get_competition_data(
+        self, id: int, *, parse_created_at: bool = False, with_files: bool = False
+    ) -> CompetitionDetail | CompetitionDetailFiles:
         """Get detailed information about competition"""
         params = {"go": "News", "in": "view", "id": id}
         if not parse_created_at:
@@ -105,7 +123,7 @@ class TmMoscowAPI:
         content_blocks = []
         for node in tr_nodes[5:]:
             content_node = node.css_first("td")
-            content_blocks = TmMoscowAPI._parse_content(content_html=cast(str, content_node.html))
+            content_blocks = self._parse_content(content_html=cast(str, content_node.html))
             if content_blocks:
                 break
 
@@ -122,7 +140,7 @@ class TmMoscowAPI:
             else:
                 author = None
 
-        return CompetitionDetail(
+        competition = CompetitionDetail(
             title=competition_summary.title,
             id=competition_summary.id,
             event_dates=competition_summary.event_dates,
@@ -136,6 +154,32 @@ class TmMoscowAPI:
             content_blocks=content_blocks,
             created_at=created_at,
         )
+        if not with_files:
+            return competition
+
+        file_nodes = list(self._file_nodes_generator(competition.content_blocks))
+        file_urls = [URL(file_node.attributes["href"]) for file_node in file_nodes]
+        # Allow only pdf files (reference: https://tmmoscow.ru/news/publish_info.pdf)
+        file_urls = [
+            url for url in file_urls if url.host == HOST and Path(url.path).suffix == ".pdf"
+        ]
+        file_urls = list(dict.fromkeys(file_urls))  # make file urls list unique
+        async with asyncio.TaskGroup() as tg:
+            tasks = [tg.create_task(self._get(url=url, raw=True)) for url in file_urls]
+        file_contents = [task.result() for task in tasks]
+        files: list[File] = []
+        for url, content in zip(file_urls, file_contents, strict=False):
+            filename = Path(url.path).name
+            if content is None:
+                files.append(File(filename=filename, content=None, url=str(url), sha256_hash=""))
+                continue
+            m = hashlib.sha256()
+            m.update(content)
+            files.append(
+                File(filename=filename, content=content, url=str(url), sha256_hash=m.hexdigest())
+            )
+
+        return CompetitionDetailFiles(competition=competition, files=files)
 
     @staticmethod
     @overload
@@ -236,23 +280,16 @@ class TmMoscowAPI:
         for link_node in metadata_node.css("a"):
             link_node.decompose()
 
-        event_dates, location = None, None
-        event_begins_at, event_ends_at = None, None
+        event_dates, location, event_begins_at, event_ends_at = None, None, None, None
         for i, node in enumerate(tr_nodes):
-            logger.debug(f"{node.html=}")
             match = re.search(EVENT_DATES_LOCATION_NODE_PATTERN, cast(str, node.html))
             if match:
-                logger.debug(f"FIND SEARCH: {match}")
                 new_node_html = re.sub(EVENT_DATES_LOCATION_NODE_PATTERN, "", cast(str, node.html))
-                # new_node = HTMLParser(html=f"<div>{new_node_html}</div>").css_first("div")
                 new_node = HTMLParser(
                     html=f"<table><tbody><tr><td>{new_node_html}</td></tr><table><tbody>"
                 )
-                logger.debug(f"{new_node_html=}")
                 tr_nodes[i] = cast(Node, new_node)
-                logger.debug(f"{new_node.html=}")
                 event_dates_location_str = match.group("event_dates_location_str")
-                logger.debug(f"{event_dates_location_str=}")
                 event_dates, location = list(
                     map(str.strip, event_dates_location_str.split(",", maxsplit=1))
                 )
@@ -314,10 +351,11 @@ class TmMoscowAPI:
             for node in current_parser.tags("a"):
                 for attr in node.attributes:
                     if attr != "href":
-                        del node.attrs[attr]  # type: ignore[attr-defined]
+                        del node.attrs[attr]
                     else:
                         node.attrs["href"] = urljoin(BASE_URL, node.attributes["href"])  # pyright: ignore[reportIndexIssue]
             current_html = get_body_html(current_parser)
+            current_html = re.sub(CONTENT_LINE_DASH_PATTERN, "", current_html, count=1)
 
             match current_type:
                 case ParsedContentLineType.TITLE:
@@ -475,12 +513,39 @@ class TmMoscowAPI:
 
         return event_begins_at, event_ends_at
 
-    async def _get(self, path: str = "", url: str = "", **kwargs: Any) -> str:
-        """Get html from full `url` or `path` relative to base url."""
+    @staticmethod
+    def _file_nodes_generator(content_blocks: list[ContentBlock]) -> Generator[Node]:
+        for content_block in content_blocks:
+            for content_line in content_block.lines:
+                if isinstance(content_line, ContentLine):
+                    file_nodes = [
+                        i for i in HTMLParser(content_line.html).css("a") if "href" in i.attributes
+                    ]
+                    yield from file_nodes
+
+    @overload
+    async def _get(
+        self, path: str = "", url: str | URL = "", raw: Literal[False] = False, **kwargs: Any
+    ) -> str: ...
+
+    @overload
+    async def _get(
+        self, path: str = "", url: str | URL = "", raw: Literal[True] = False, **kwargs: Any
+    ) -> bytes | None: ...
+
+    async def _get(
+        self, path: str = "", url: str | URL = "", raw: bool = False, **kwargs: Any
+    ) -> str | bytes | None:
+        """Get html or file content from full `url` or `path` relative to base url."""
         url = url or urljoin(BASE_URL, path)
         async with self._session.request(method="GET", url=url, **kwargs) as response:
             logger.debug("Sent GET request: %d: %s", response.status, str(response.url))
-            response.raise_for_status()
+            if not response.ok:
+                if raw:
+                    return None
+                response.raise_for_status()
+            if raw:
+                return await response.content.read()
             return await response.text(encoding=HTML_ENCODING)
 
     async def close(self) -> None:

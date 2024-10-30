@@ -52,3 +52,4 @@ MONTH_NAME_TO_NUMBER = {
 VIEWS_PATTERN = re.compile(r"Прочита(на|но|ли):\s*(?P<views>\d*)", flags=re.IGNORECASE)
 AUTHOR_PATTERN = re.compile(r"Автор:\s*(?P<author>[а-яА-Яa-zA-Z]+)", flags=re.IGNORECASE)
 CONTENT_LINE_PATTERN = re.compile(r"\s*-\s*.*$")
+CONTENT_LINE_DASH_PATTERN = re.compile(r"\s*-\s*")
