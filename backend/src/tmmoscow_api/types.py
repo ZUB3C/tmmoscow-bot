@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from typing import NamedTuple
 
 from tmmoscow_api.const import INDEX_URL
 
@@ -45,3 +46,16 @@ class CompetitionDetail(CompetitionSummary):
     created_at: (
         datetime | None
     )  # None only if parse_created_at=False, otherwise it always will be parsed
+
+
+@dataclass(frozen=True)
+class File:
+    filename: str
+    content: bytes | None
+    url: str
+    sha256_hash: str
+
+
+class CompetitionDetailFiles(NamedTuple):
+    competition: CompetitionDetail
+    files: list[File]

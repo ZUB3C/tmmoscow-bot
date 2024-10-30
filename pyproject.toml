@@ -1,9 +1,5 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
-name = "tmmoscow"
+name = "tmmoscow-bot"
 version = "0.1.0"
 description = "Telegram bot to get updates from tmmoscow.ru"
 license = "GPL-3.0-or-later"
@@ -11,9 +7,6 @@ readme = "README.md"
 requires-python = ">=3.11"
 authors = [
     { name = "ZUB3C", email = "pitzubarev@yandex.ru" },
-]
-keywords = [
-    "tmmoscow",
 ]
 classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
@@ -33,27 +26,29 @@ dependencies = [
     "sqlalchemy>=2.0.25",
     "asyncpg>=0.29.0",
     "alembic>=1.13.1",
-    "aiohttp>=3.9.5",
-    "selectolax>=0.3.21",
     "aiogram>=3.3.0",
     "aiogram-i18n>=1.3.4",
     "fluent-runtime>=0.4.0",
     "pydantic-settings>=2.1.0",
     "yarl>=1.9.4",
     "loguru>=0.7.2",
-    "ruff>=0.7.1",
+    "tmmoscow-api"
 ]
 
 [dependency-groups]
 dev = [
     "basedpyright>=1.17.1",
+    "ruff>=0.7.1",
 ]
 
 [tool.uv]
 package = false
 
-[tool.hatch.metadata]
-allow-direct-references = true
+[tool.uv.sources]
+tmmoscow-api = { workspace = true }
+
+[tool.uv.workspace]
+members = ["backend"]
 
 [tool.ruff]
 target-version = "py311"

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base, Int64, TimestampMixin
 
 
-class Files(Base, TimestampMixin):
+class File(Base, TimestampMixin):
     __tablename__ = "files"
 
     id: Mapped[Int64] = mapped_column(primary_key=True, nullable=False)

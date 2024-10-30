@@ -2,7 +2,9 @@ import re
 
 from .enums import DistanceType
 
-BASE_URL = "http://www.tmmoscow.ru"
+HOST = "www.tmmoscow.ru"
+SCHEME = "http"
+BASE_URL = f"{SCHEME}://{HOST}"
 INDEX_PATH = "/index.php"
 INDEX_URL = f"{BASE_URL}{INDEX_PATH}"
 

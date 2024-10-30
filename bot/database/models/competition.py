@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base, Int64, TimestampMixin
 
 
-class Competitions(Base, TimestampMixin):
+class Competition(Base, TimestampMixin):
     __tablename__ = "competitions"
 
     id: Mapped[Int64] = mapped_column(primary_key=True, nullable=False)
@@ -22,7 +22,7 @@ class Competitions(Base, TimestampMixin):
     competition_updated_at: Mapped[datetime] = mapped_column(nullable=False)
 
 
-class CompetitionVersions(Base, TimestampMixin):
+class CompetitionVersion(Base, TimestampMixin):
     __tablename__ = "competition_versions"
 
     competition_id: Mapped[Int64] = mapped_column(ForeignKey("competitions.id"), nullable=False)
